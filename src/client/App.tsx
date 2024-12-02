@@ -7,11 +7,19 @@ import './App.css'
 export const App: React.FC = () => {
   const graphRef = useRef<HTMLDivElement>(null)
   const networkRef = useRef<Network | null>(null)
-  const { graphs, selectedGraph, selectGraph } = useStore()
+  const { 
+    graphs, 
+    selectedGraph, 
+    selectedNode,
+    hoveredNode,
+    selectGraph, 
+    selectNode,
+    setHoveredNode 
+  } = useStore()
   const currentGraph = selectedGraph ? graphs[selectedGraph] : undefined
 
   useEffect(() => {
-    const eventSource = new EventSource('/events')
+    const eventSource = new EventSource('http://localhost:3000/events')
     
     eventSource.onmessage = (event) => {
       const graphEvent = JSON.parse(event.data)
@@ -27,7 +35,7 @@ export const App: React.FC = () => {
     const nodes = new Set<string>()
     const edges: Array<{ from: string; to: string }> = []
 
-    currentGraph.dependencies.forEach((deps, node) => {
+    Object.entries(currentGraph.dependencies).forEach(([node, deps]) => {
       nodes.add(node)
       deps.forEach(dep => {
         nodes.add(dep)
@@ -39,32 +47,52 @@ export const App: React.FC = () => {
       nodes: Array.from(nodes).map(id => ({
         id,
         label: id,
-        color: getNodeColor(currentGraph.status.get(id))
+        color: getNodeColor(currentGraph.status[id])
       })),
       edges
     }
 
     if (!networkRef.current) {
-      networkRef.current = new Network(graphRef.current, visData, {
-        physics: {
-          stabilization: true,
-          barnesHut: {
-            gravitationalConstant: -80000,
-            springConstant: 0.001,
-            springLength: 200
-          }
+      const network = new Network(graphRef.current, visData, {
+        height: '100%',
+        width: '100%',
+        physics: { stabilization: true },
+        interaction: { hover: true },
+        nodes: {
+          shape: 'box',
+          margin: { top: 10, bottom: 10 },
+          font: { size: 14 }
         },
-        layout: {
-          hierarchical: {
-            direction: 'LR',
-            sortMethod: 'directed'
-          }
-        }
+        edges: { arrows: 'to' }
       })
-    } else {
-      networkRef.current.setData(visData)
-    }
+      
+      network.on('selectNode', (params) => {
+        selectNode(params.nodes[0])
+      })
+      
+      network.on('hoverNode', (params) => {
+        setHoveredNode(params.node)
+      })
+      
+      network.on('blurNode', () => {
+        setHoveredNode(null)
+      })
+
+      network.on('deselectNode', () => {
+        selectNode(null)
+      })
+      
+      networkRef.current = network
+    } 
+    networkRef.current.setData(visData)
   }, [selectedGraph, graphs])
+
+  const getNodeValue = (nodeId: string) => {
+    if (!currentGraph?.completedEvents[nodeId]) return null
+    return currentGraph.completedEvents[nodeId].value
+  }
+
+  const displayNode = hoveredNode || selectedNode
 
   return (
     <div className="App">
@@ -80,15 +108,26 @@ export const App: React.FC = () => {
               {name}
             </div>
           ))}
+
+          {displayNode && currentGraph?.status[displayNode] === EventStatus.COMPLETED && (
+            <>
+                <div className="node-value">
+                <strong>{displayNode}</strong>
+                <pre>
+                  {JSON.stringify(getNodeValue(displayNode), null, 2)}
+                </pre>
+              </div>
+            </>
+          )}
         </div>
         <div className="graph" ref={graphRef} />
       </div>
       <div className="errors-container">
-        {currentGraph && Array.from(currentGraph.errors.entries()).length > 0 && (
+        {currentGraph && Object.keys(currentGraph.errors).length > 0 && (
           <>
             <h3>Errors</h3>
             <ul className="error-list">
-              {Array.from(currentGraph.errors.entries()).map(([eventId, error]) => (
+              {Object.entries(currentGraph.errors).map(([eventId, error]) => (
                 <li key={`${eventId}-${error.timestamp}`} className="error-item">
                   <span className="error-event">Event: {eventId}</span>
                   <span className="error-message">{error.error}</span>

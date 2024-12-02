@@ -5,7 +5,7 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: 'dist',
+    outDir: '../../dist/client',
     emptyOutDir: true
   },
   root: path.join(__dirname),

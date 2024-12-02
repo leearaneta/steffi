@@ -1,4 +1,22 @@
 {
+  "name": "steffi",
+  "version": "1.0.0",
+  "description": "typesafe DAG (directed acyclic graph) execution",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "MIT",
+  "author": "leearaneta",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leearaneta/steffi.git"
+  },
+  "keywords": [
+    "typescript",
+    "dependency-graph",
+    "visualization",
+    "events",
+    "async"
+  ],
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -18,11 +36,12 @@
   },
   "scripts": {
     "build:client": "vite build src/client",
-    "build:server": "tsc",
-    "build": "npm run build:client && npm run build:server",
+    "build": "npm run build:client && tsc -p tsconfig.json",
     "dev:client": "vite src/client",
     "preview": "vite preview",
-    "test": "jest"
+    "test": "jest",
+    "example": "npx ts-node example/index.ts",
+    "prepublishOnly": "npm run build"
   },
   "files": [
     "dist/**/*",

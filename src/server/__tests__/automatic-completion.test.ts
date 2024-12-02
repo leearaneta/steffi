@@ -19,7 +19,7 @@ describe('DependencyGraph - Automatic Completion', () => {
 
     await new Promise(resolve => setImmediate(resolve))
 
-    expect(graph.getGraph().status.get('target')).toBe(EventStatus.COMPLETED)
+    expect(graph.getEventStatus('target')).toBe(EventStatus.COMPLETED)
   })
 
   it('does not automatically complete event when fireOnComplete is false', async () => {
@@ -40,9 +40,9 @@ describe('DependencyGraph - Automatic Completion', () => {
 
     await new Promise(resolve => setImmediate(resolve))
 
-    expect(graph.getGraph().status.get('target')).toBe(EventStatus.IN_PROGRESS)
+    expect(graph.getEventStatus('target')).toBe(EventStatus.IN_PROGRESS)
 
     await graph.completeEvent('target', true)
-    expect(graph.getGraph().status.get('target')).toBe(EventStatus.COMPLETED)
+    expect(graph.getEventStatus('target')).toBe(EventStatus.COMPLETED)
   })
-}) 
+})

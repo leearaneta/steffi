@@ -19,11 +19,11 @@ export interface EventError {
 }
 
 export interface GraphState {
-  dependencies: Map<string, Set<string>>;
-  dependents: Map<string, Set<string>>;
-  completedEvents: Map<string, any>;
-  status: Map<string, EventStatus>;
-  errors: Map<string, EventError>;
+  dependencies: Record<string, string[]>;
+  dependents: Record<string, string[]>;
+  completedEvents: Record<string, any>;
+  status: Record<string, EventStatus>;
+  errors: Record<string, EventError>;
 }
 
 export type GraphEvent = 

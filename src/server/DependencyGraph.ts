@@ -12,6 +12,24 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     this.eventManager = new EventManager(this, options)
   }
 
+  private async tryRunEvent(type: keyof TEventPayloads) {
+    const dependencies = this.dependencies.get(type) || new Set()
+    const allDependenciesCompleted = dependencies.size === 0 || 
+      Array.from(dependencies).every(dep => 
+        this.eventManager.getStatus(dep) === EventStatus.COMPLETED
+      )
+
+    if (allDependenciesCompleted) {
+      const deps = Array.from(dependencies) as Array<keyof TEventPayloads>
+      const dependencyValues = deps.reduce((acc, dep) => ({
+        ...acc,
+        [dep]: this.eventManager.getCompletedEvents().get(String(dep))?.value
+      }), {}) as Pick<TEventPayloads, typeof deps[number]>
+      
+      await this.eventManager.executeEvent(type, dependencyValues)
+    }
+  }
+
   registerEvent<TDeps extends keyof TEventPayloads>(
     type: keyof TEventPayloads,
     dependencies: TDeps[],
@@ -30,7 +48,7 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     // wrap the runnable to automatically fire onComplete when event is completed
     const wrappedRunnable = finalOptions.fireOnComplete
       ? async (args: Pick<TEventPayloads, TDeps>) => {
-          const value =await runnable(args)
+          const value = await runnable(args)
           await this.completeEvent(type, value)
         }
       : runnable
@@ -46,20 +64,7 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     this.eventManager.registerEvent(type, wrappedRunnable, finalOptions)
     this.emit('eventRegistered', type, dependencies)
 
-    const allDependenciesCompleted =
-      dependencies.every(dep =>
-        this.eventManager.getStatus(dep) === EventStatus.COMPLETED
-      )
-        || dependencies.length === 0
-
-    if (allDependenciesCompleted) {
-      const dependencyValues = dependencies.reduce((acc, dep) => ({
-        ...acc,
-        [dep]: this.eventManager.getCompletedEvents().get(String(dep))?.value
-      }), {}) as Pick<TEventPayloads, TDeps>
-
-      void this.eventManager.executeEvent(type, dependencyValues)
-    }
+    void this.tryRunEvent(type)
   }
 
   async completeEvent<T extends keyof TEventPayloads>(type: T, value?: TEventPayloads[T]) {
@@ -67,24 +72,9 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     
     const dependents = this.dependents.get(type) || new Set()
     
-    // for each dependent, check if all its dependencies are completed
+    // for each dependent, check if it can be run
     for (const dependent of dependents) {
-      const dependencies = this.dependencies.get(dependent) || new Set()
-      const allDependenciesCompleted = Array.from(dependencies).every(dep => 
-        this.eventManager.getStatus(dep) === EventStatus.COMPLETED
-      )
-
-      // if all dependencies are completed, execute the runnable
-      if (allDependenciesCompleted) {
-        const deps = Array.from(dependencies) as Array<keyof TEventPayloads>
-        
-        const dependencyValues = deps.reduce((acc, dep) => ({
-          ...acc,
-          [dep]: this.eventManager.getCompletedEvents().get(String(dep))?.value
-        }), {}) as Pick<TEventPayloads, typeof deps[number]>
-        
-        await this.eventManager.executeEvent(dependent, dependencyValues)
-      }
+      await this.tryRunEvent(dependent)
     }
   }
 
@@ -96,25 +86,42 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     for (const dependent of dependents) {
       this.eventManager.resetEvent(dependent)
     }
+
+    await this.tryRunEvent(type)
   }
 
   async resetEventsAfterTime(time: Date) {
-    this.eventManager.resetEventsAfterTime(time)
+    const resetEvents = this.eventManager.resetEventsAfterTime(time)
+    
+    // Try to rerun each reset event
+    for (const event of resetEvents) {
+      await this.tryRunEvent(event)
+    }
   }
 
   getGraph(): GraphState {
     return {
-      dependencies: new Map(Array.from(this.dependencies).map(([k, v]) => [
-        String(k),
-        new Set(Array.from(v).map(String))
-      ])),
-      dependents: new Map(Array.from(this.dependents).map(([k, v]) => [
-        String(k),
-        new Set(Array.from(v).map(String))
-      ])),
-      completedEvents: this.eventManager.getCompletedEvents(),
-      status: this.eventManager.getAllStatuses(),
-      errors: this.eventManager.getErrors()
+      dependencies: Object.fromEntries(
+        Array.from(this.dependencies).map(([k, v]) => [
+          String(k),
+          Array.from(v).map(String)
+        ])
+      ),
+      dependents: Object.fromEntries(
+        Array.from(this.dependents).map(([k, v]) => [
+          String(k),
+          Array.from(v).map(String)
+        ])
+      ),
+      completedEvents: Object.fromEntries(
+        Array.from(this.eventManager.getCompletedEvents())
+      ),
+      status: Object.fromEntries(
+        Array.from(this.eventManager.getAllStatuses())
+      ),
+      errors: Object.fromEntries(
+        Array.from(this.eventManager.getErrors())
+      )
     }
   }
 
@@ -199,5 +206,9 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     }
 
     return visit(newEvent)
+  }
+
+  getEventStatus(type: keyof TEventPayloads): EventStatus | undefined {
+    return this.eventManager.getStatus(type)
   }
 } 

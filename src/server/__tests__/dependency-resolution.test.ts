@@ -1,5 +1,4 @@
 import { DependencyGraph } from '../DependencyGraph'
-import { EventStatus } from '../../types'
 
 describe('DependencyGraph - Dependency Resolution', () => {
   interface TestEvents {

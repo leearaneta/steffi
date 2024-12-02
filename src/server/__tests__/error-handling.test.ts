@@ -23,7 +23,7 @@ describe('DependencyGraph - Error Handling', () => {
     await graph.completeEvent('initial')
 
     expect(tries).toBe(2)
-    expect(graph.getGraph().status.get('event1')).toBe(EventStatus.COMPLETED)
+    expect(graph.getEventStatus('event1')).toBe(EventStatus.COMPLETED)
   })
 
   it('fails after maxRetries attempts', async () => {
@@ -46,7 +46,7 @@ describe('DependencyGraph - Error Handling', () => {
     }
 
     expect(handler).toHaveBeenCalledTimes(3) // initial + 2 retries
-    expect(graph.getGraph().status.get('event1')).toBe(EventStatus.FAILED)
+    expect(graph.getEventStatus('event1')).toBe(EventStatus.FAILED)
   })
 
   it('fails on timeout', async () => {
@@ -67,6 +67,6 @@ describe('DependencyGraph - Error Handling', () => {
       expect(e.message).toContain('timed out')
     }
 
-    expect(graph.getGraph().status.get('event1')).toBe(EventStatus.FAILED)
+    expect(graph.getEventStatus('event1')).toBe(EventStatus.FAILED)
   })
 }) 

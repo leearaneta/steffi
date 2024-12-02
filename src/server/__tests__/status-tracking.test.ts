@@ -8,21 +8,20 @@ describe('DependencyGraph - Status Tracking', () => {
       event1: { value: number }
     }>()
     
-    const getStatus = () => graph.getGraph().status
 
     graph.registerEvent('event1', ['initial'], async () => {
       await new Promise(resolve => setTimeout(resolve, 10))
     })
 
-    expect(getStatus().get('event1')).toBe(EventStatus.PENDING)
+    expect(graph.getEventStatus('event1')).toBe(EventStatus.PENDING)
 
     const completion = graph.completeEvent('initial')
 
     await new Promise(resolve => setImmediate(resolve))
-    expect(getStatus().get('event1')).toBe(EventStatus.IN_PROGRESS)
+    expect(graph.getEventStatus('event1')).toBe(EventStatus.IN_PROGRESS)
 
     await completion
-    expect(getStatus().get('event1')).toBe(EventStatus.COMPLETED)
+    expect(graph.getEventStatus('event1')).toBe(EventStatus.COMPLETED)
   })
 
   it('marks event as FAILED when it throws', async () => {
@@ -41,6 +40,6 @@ describe('DependencyGraph - Status Tracking', () => {
       // expected to throw
     }
 
-    expect(graph.getGraph().status.get('event1')).toBe(EventStatus.FAILED)
+    expect(graph.getEventStatus('event1')).toBe(EventStatus.FAILED)
   })
 }) 

@@ -1,16 +1,22 @@
-import create from 'zustand'
+import { create } from 'zustand'
 import { GraphState, GraphEvent, EventStatus } from '../types'
 
 interface Store {
   graphs: Record<string, GraphState>
   selectedGraph: string | null
+  selectedNode: string | null
+  hoveredNode: string | null
   handleEvent: (event: GraphEvent) => void
   selectGraph: (name: string) => void
+  selectNode: (name: string | null) => void
+  setHoveredNode: (name: string | null) => void
 }
 
 export const useStore = create<Store>((set) => ({
   graphs: {},
   selectedGraph: null,
+  selectedNode: null,
+  hoveredNode: null,
   
   handleEvent: (event) => set(state => {
     switch (event.type) {
@@ -33,10 +39,10 @@ export const useStore = create<Store>((set) => ({
             ...state.graphs,
             [graphName]: {
               ...graph,
-              dependencies: new Map([
+              dependencies: {
                 ...graph.dependencies,
-                [eventName, new Set(dependencies)]
-              ])
+                [eventName]: dependencies
+              }
             }
           }
         }
@@ -53,10 +59,10 @@ export const useStore = create<Store>((set) => ({
             ...state.graphs,
             [graphName]: {
               ...graph,
-              status: new Map([
+              status: {
                 ...graph.status,
-                [eventName, EventStatus.IN_PROGRESS]
-              ])
+                [eventName]: EventStatus.IN_PROGRESS
+              }
             }
           }
         }
@@ -73,14 +79,14 @@ export const useStore = create<Store>((set) => ({
             ...state.graphs,
             [graphName]: {
               ...graph,
-              status: new Map([
+              status: {
                 ...graph.status,
-                [eventName, EventStatus.COMPLETED]
-              ]),
-              completedEvents: new Map([
+                [eventName]: EventStatus.COMPLETED
+              },
+              completedEvents: {
                 ...graph.completedEvents,
-                [eventName, { at: new Date(), value }]
-              ])
+                [eventName]: { at: new Date(), value }
+              }
             }
           }
         }
@@ -97,14 +103,14 @@ export const useStore = create<Store>((set) => ({
             ...state.graphs,
             [graphName]: {
               ...graph,
-              status: new Map([
+              status: {
                 ...graph.status,
-                [eventName, EventStatus.FAILED]
-              ]),
-              errors: new Map([
+                [eventName]: EventStatus.FAILED
+              },
+              errors: {
                 ...graph.errors,
-                [eventName, error]
-              ])
+                [eventName]: error
+              }
             }
           }
         }
@@ -115,5 +121,7 @@ export const useStore = create<Store>((set) => ({
     }
   }),
   
-  selectGraph: (name) => set({ selectedGraph: name })
+  selectGraph: (name) => set({ selectedGraph: name }),
+  selectNode: (name) => set({ selectedNode: name }),
+  setHoveredNode: (name) => set({ hoveredNode: name })
 })) 

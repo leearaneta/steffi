@@ -1,5 +1,4 @@
 import { DependencyGraph } from '../DependencyGraph'
-import { EventStatus } from '../../types'
 
 describe('DependencyGraph - Reset Functionality', () => {
   it('resets an event and its dependents by name', async () => {
@@ -10,29 +9,29 @@ describe('DependencyGraph - Reset Functionality', () => {
       event3: { value: number }
     }>()
 
-    graph.registerEvent('event1', ['initial'], async () => {
-      return { value: 1 }
-    })
-    graph.registerEvent('event2', ['event1'], async () => {
-      return { value: 2 }
-    })
-    graph.registerEvent('event3', ['event2'], async () => {
-      return { value: 3 }
-    })
+    const event1Fn = jest.fn().mockResolvedValue({ value: 1 })
+    const event2Fn = jest.fn().mockResolvedValue({ value: 2 })
+    const event3Fn = jest.fn().mockResolvedValue({ value: 3 })
+
+    graph.registerEvent('event1', ['initial'], event1Fn)
+    graph.registerEvent('event2', ['event1'], event2Fn)
+    graph.registerEvent('event3', ['event2'], event3Fn)
 
     await graph.completeEvent('initial')
+    await new Promise(resolve => setTimeout(resolve, 0))
 
-    const statusBefore = graph.getGraph().status
-    expect(statusBefore.get('event1')).toBe(EventStatus.COMPLETED)
-    expect(statusBefore.get('event2')).toBe(EventStatus.COMPLETED)
-    expect(statusBefore.get('event3')).toBe(EventStatus.COMPLETED)
+    // Verify initial execution
+    expect(event1Fn).toHaveBeenCalledTimes(1)
+    expect(event2Fn).toHaveBeenCalledTimes(1)
+    expect(event3Fn).toHaveBeenCalledTimes(1)
 
     await graph.resetEvent('event1')
+    await new Promise(resolve => setTimeout(resolve, 0))
 
-    const statusAfter = graph.getGraph().status
-    expect(statusAfter.get('event1')).toBe(EventStatus.PENDING)
-    expect(statusAfter.get('event2')).toBe(EventStatus.PENDING)
-    expect(statusAfter.get('event3')).toBe(EventStatus.PENDING)
+    // Verify events were rerun after reset
+    expect(event1Fn).toHaveBeenCalledTimes(2)
+    expect(event2Fn).toHaveBeenCalledTimes(2)
+    expect(event3Fn).toHaveBeenCalledTimes(2)
   })
 
   it('resets events completed before a specific time', async () => {
@@ -41,30 +40,38 @@ describe('DependencyGraph - Reset Functionality', () => {
       event2: void
     }>()
   
-    graph.registerEvent('event1', [], async () => { return 'completed' })
+    const event1Fn = jest.fn().mockResolvedValue('completed')
+    const event2Fn = jest.fn().mockResolvedValue('completed')
+
+    graph.registerEvent('event1', [], event1Fn)
     const now = new Date()
     const pastTime = new Date(now.getTime() - 1000)
     const futureTime = new Date(now.getTime() + 1000)
 
+    // Wait for event1 to complete
     await new Promise(resolve => setTimeout(resolve, 50))
-    graph.registerEvent('event2', [], async () => { return 'completed' })
 
-  
+    graph.registerEvent('event2', [], event2Fn)
+    // Wait for event2 to complete
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    // Verify initial state
+    expect(event1Fn).toHaveBeenCalledTimes(1)
+    expect(event2Fn).toHaveBeenCalledTimes(1)
 
     await graph.resetEventsAfterTime(futureTime)
-  
-    let status = graph.getGraph().status
-    expect(status.get('event1')).toBe(EventStatus.COMPLETED)
-    expect(status.get('event2')).toBe(EventStatus.COMPLETED)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(event1Fn).toHaveBeenCalledTimes(1) // No change
+    expect(event2Fn).toHaveBeenCalledTimes(1) // No change
 
     await graph.resetEventsAfterTime(now)
-    status = graph.getGraph().status
-    expect(status.get('event1')).toBe(EventStatus.COMPLETED)
-    expect(status.get('event2')).toBe(EventStatus.PENDING)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(event1Fn).toHaveBeenCalledTimes(1) // No change
+    expect(event2Fn).toHaveBeenCalledTimes(2) // event2 rerun
 
     await graph.resetEventsAfterTime(pastTime)
-    status = graph.getGraph().status
-    expect(status.get('event1')).toBe(EventStatus.PENDING)
-    expect(status.get('event2')).toBe(EventStatus.PENDING)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(event1Fn).toHaveBeenCalledTimes(2) // event1 rerun
+    expect(event2Fn).toHaveBeenCalledTimes(3) // event2 rerun again
   })
 }) 

@@ -1,6 +1,6 @@
 # Steffi
 
-A TypeScript library for managing and visualizing dependency graphs with real-time event tracking. Named after [Steffi Graf](https://en.wikipedia.org/wiki/Steffi_Graf), the "Queen of the Court".
+A TypeScript library for DAG (directed acyclic graph) execution. (named after [Steffi Graf](https://en.wikipedia.org/wiki/Steffi_Graf))
 
 ## Installation
 
@@ -55,18 +55,20 @@ graph.registerEvent(
   }
 )
 
-// Start the visualization server
-const registry = GraphRegistry.getInstance()
-registry.registerGraph('userFlow', graph)
-registry.startVisualizationServer(3000)
-
 // Trigger the graph
 await graph.completeEvent('init')
 ```
 
 ### Visualization
 
-Open `http://localhost:3000` in your browser to see the real-time graph visualization.
+```typescript
+// Start the visualization server
+const registry = GraphRegistry.getInstance()
+registry.registerGraph('userFlow', graph)
+registry.startVisualizationServer(3000)
+```
+
+Then open `http://localhost:3000` in your browser to view your graph.
 
 ## API Reference
 
@@ -95,4 +97,6 @@ graph.registerEvent('myEvent', [], handler, {
   retryDelay: 1000, // ms
   timeout: 5000 // ms
 })
-``` 
+```
+
+## TODO: separate visualization server from rest of library

@@ -1,5 +1,5 @@
 import { DependencyGraph } from './DependencyGraph'
-import { createServer } from 'http'
+import { createServer, Server } from 'http'
 import path from 'path'
 import fs from 'fs'
 import http from 'http'
@@ -64,7 +64,7 @@ export class GraphRegistry {
     return this.graphs.get(name)
   }
 
-  startVisualizationServer(port: number) {
+  startVisualizationServer(port: number): Server {
     if (this.server) {
       console.warn('Visualization server is already running')
       return this.server
@@ -73,25 +73,33 @@ export class GraphRegistry {
     this.server = createServer((req, res) => {
       const distPath = path.join(__dirname, '../client/dist')
 
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204)
+        res.end()
+        return
+      }
+
       if (req.url === '/events') {
         res.writeHead(200, {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
-          'Access-Control-Allow-Origin': '*'
         })
 
+        this.clients.add(res)
+
         this.graphs.forEach((graph, name) => {
-          this.broadcast({
+          const data = {
             type: 'GRAPH_REGISTERED',
             payload: {
               name,
               initialState: graph.getGraph()
             }
-          })
+          }
+          console.log(graph.getGraph())
+          res.write(`data: ${JSON.stringify(data)}\n\n`)
         })
 
-        this.clients.add(res)
         req.on('close', () => {
           this.clients.delete(res)
         })

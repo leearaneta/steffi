@@ -50,6 +50,11 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
   }
 
   async executeEvent(type: keyof TEventPayloads, value?: any) {
+    const currentStatus = this.eventStatus.get(type)
+    if (currentStatus === EventStatus.COMPLETED || currentStatus === EventStatus.IN_PROGRESS) {
+      return // Don't execute if already completed or in progress
+    }
+
     const options = this.eventOptions.get(type)!
     const { maxRetries, retryDelay, timeout } = options || this.defaultOptions
 
@@ -97,7 +102,7 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
     this.errors.delete(type)
   }
 
-  resetEventsAfterTime(time: Date) {
+  resetEventsAfterTime(time: Date): Set<keyof TEventPayloads> {
     const eventsToReset = new Set<keyof TEventPayloads>()
     
     for (const [key, value] of this.completedEvents) {
@@ -109,6 +114,8 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
     for (const eventType of eventsToReset) {
       this.resetEvent(eventType)
     }
+
+    return eventsToReset
   }
 
   getCompletedEvents() {
