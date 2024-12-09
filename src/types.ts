@@ -23,6 +23,7 @@ export interface GraphState {
   dependencies: Record<string, string[]>;
   dependents: Record<string, string[]>;
   completedEvents: Record<string, any>;
+  completedTimestamps: Record<string, number>;
   status: Record<string, EventStatus>;
   errors: Record<string, EventError>;
 }

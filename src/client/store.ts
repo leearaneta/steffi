@@ -85,7 +85,11 @@ export const useStore = create<Store>((set) => ({
               },
               completedEvents: {
                 ...graph.completedEvents,
-                [eventName]: { at: new Date(), value }
+                [eventName]: value
+              },
+              completedTimestamps: {
+                ...graph.completedTimestamps,
+                [eventName]: Date.now()
               }
             }
           }

@@ -107,6 +107,9 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
       completedEvents: Object.fromEntries(
         Array.from(this.eventManager.getCompletedEvents())
       ),
+      completedTimestamps: Object.fromEntries(
+        Array.from(this.eventManager.getCompletedTimestamps())
+      ),
       status: Object.fromEntries(
         Array.from(this.eventManager.getAllStatuses())
       ),
@@ -259,7 +262,7 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     // Return values from completed group
     return completedGroup.reduce((acc, dep) => ({
       ...acc,
-      [dep]: this.eventManager.getCompletedEvents().get(String(dep))?.value
+      [dep]: this.eventManager.getCompletedEvents().get(String(dep))
     }), {}) as Pick<TEventPayloads, TDeps>
   }
 } 

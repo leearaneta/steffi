@@ -3,8 +3,8 @@ import { BaseEventPayloads, DependencyGraphOptions, EventStatus, EventError } fr
 
 export class EventManager<TEventPayloads extends BaseEventPayloads> {
   private runnables: Map<keyof TEventPayloads, (args: any) => Promise<void>> = new Map()
-  private downFunctions: Map<keyof TEventPayloads, (value: any) => Promise<void>> = new Map()
-  private completedEvents: Map<keyof TEventPayloads, any> = new Map()
+  private completedEvents: Map<keyof TEventPayloads, TEventPayloads[keyof TEventPayloads]> = new Map()
+  private completedTimestamps: Map<keyof TEventPayloads, number> = new Map()
   private eventOptions: Map<keyof TEventPayloads, Required<DependencyGraphOptions>> = new Map()
   private eventStatus: Map<keyof TEventPayloads, EventStatus> = new Map()
   private readonly defaultOptions: Required<DependencyGraphOptions>
@@ -25,33 +25,30 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
   registerEvent(
     type: keyof TEventPayloads,
     runnable: (args: any) => Promise<void>,
-    options: DependencyGraphOptions & { down?: (value: any) => Promise<void> } = {}
+    options: DependencyGraphOptions = {}
   ) {
-    const { down, ...restOptions } = options
     const mergedOptions = {
       ...this.defaultOptions,
-      ...restOptions
+      ...options
     }
     
     this.eventOptions.set(type, mergedOptions)
     this.runnables.set(type, runnable)
-    if (down) {
-      this.downFunctions.set(type, down)
-    }
     this.eventStatus.set(type, EventStatus.PENDING)
   }
 
   deregisterEvent(type: keyof TEventPayloads) {
     this.runnables.delete(type)
-    this.downFunctions.delete(type)
     this.completedEvents.delete(type)
+    this.completedTimestamps.delete(type)
     this.eventOptions.delete(type)
     this.eventStatus.delete(type)
     this.errors.delete(type)
   }
 
   async completeEvent(type: keyof TEventPayloads, value?: any) {
-    this.completedEvents.set(type, { at: new Date(), value })
+    this.completedEvents.set(type, value)
+    this.completedTimestamps.set(type, Date.now())
     this.eventStatus.set(type, EventStatus.COMPLETED)
     this.emitter.emit('eventCompleted', type, value)
     this.errors.delete(type)
@@ -106,6 +103,7 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
 
   resetEvent(type: keyof TEventPayloads) {
     this.completedEvents.delete(type)
+    this.completedTimestamps.delete(type)
     this.eventStatus.set(type, EventStatus.PENDING)
     this.errors.delete(type)
   }
@@ -113,8 +111,8 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
   resetEventsAfterTime(time: Date): Set<keyof TEventPayloads> {
     const eventsToReset = new Set<keyof TEventPayloads>()
     
-    for (const [key, value] of this.completedEvents) {
-      if (value.at > time) {
+    for (const [key, timestamp] of this.completedTimestamps) {
+      if (timestamp > time.getTime()) {
         eventsToReset.add(key)
       }
     }
@@ -130,6 +128,10 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
     return new Map(Array.from(this.completedEvents).map(([k, v]) => [String(k), v]))
   }
 
+  getCompletedTimestamps() {
+    return new Map(Array.from(this.completedTimestamps).map(([k, v]) => [String(k), v]))
+  }
+
   getStatus(type: keyof TEventPayloads): EventStatus | undefined {
     return this.eventStatus.get(type)
   }
@@ -140,10 +142,6 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
 
   getErrors() {
     return new Map(Array.from(this.errors).map(([k, v]) => [String(k), v]))
-  }
-
-  getDownFunction(type: keyof TEventPayloads) {
-    return this.downFunctions.get(type)
   }
 
   getCompletedValue(type: keyof TEventPayloads) {

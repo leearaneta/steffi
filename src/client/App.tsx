@@ -88,8 +88,12 @@ export const App: React.FC = () => {
   }, [selectedGraph, graphs])
 
   const getNodeValue = (nodeId: string) => {
-    if (!currentGraph?.completedEvents[nodeId]) return null
-    return currentGraph.completedEvents[nodeId].value
+    return currentGraph?.completedEvents[nodeId]
+  }
+
+  const getNodeTimestamp = (nodeId: string) => {
+    if (!currentGraph?.completedTimestamps[nodeId]) return null
+    return new Date(currentGraph.completedTimestamps[nodeId])
   }
 
   const displayNode = hoveredNode || selectedNode
@@ -110,14 +114,15 @@ export const App: React.FC = () => {
           ))}
 
           {displayNode && currentGraph?.status[displayNode] === EventStatus.COMPLETED && (
-            <>
-                <div className="node-value">
-                <strong>{displayNode}</strong>
-                <pre>
-                  {JSON.stringify(getNodeValue(displayNode), null, 2)}
-                </pre>
+            <div className="node-value">
+              <strong>{displayNode}</strong>
+              <div className="node-timestamp">
+                Completed: {getNodeTimestamp(displayNode)?.toLocaleString()}
               </div>
-            </>
+              <pre>
+                {JSON.stringify(getNodeValue(displayNode), null, 2)}
+              </pre>
+            </div>
           )}
         </div>
         <div className="graph" ref={graphRef} />
