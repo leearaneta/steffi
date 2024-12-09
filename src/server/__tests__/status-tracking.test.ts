@@ -10,7 +10,6 @@ describe('DependencyGraph - Status Tracking', () => {
     
     graph.registerEvent('event1', ['initial'], async () => {
       await new Promise(resolve => setTimeout(resolve, 10))
-      return { value: 1 }
     })
 
     expect(graph.getEventStatus('event1')).toBe(EventStatus.PENDING)

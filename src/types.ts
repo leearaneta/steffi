@@ -37,9 +37,3 @@ export type GraphEvent =
 
 export type DependencyGroup<T> = Array<keyof T>
 export type Dependencies<T> = DependencyGroup<T> | Array<DependencyGroup<T>>
-
-// Simpler version that gives access to all possible dependencies
-export type DependencyKeys<
-  TEventPayloads extends BaseEventPayloads,
-  K extends keyof TEventPayloads
-> = Exclude<keyof TEventPayloads, K>;
