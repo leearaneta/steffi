@@ -11,6 +11,7 @@ export type DependencyGraphOptions = {
   maxRetries?: number;
   retryDelay?: number;
   timeout?: number;
+  fireOnComplete?: boolean;
 }
 
 export interface EventError {
@@ -32,3 +33,12 @@ export type GraphEvent =
   | { type: 'EVENT_STARTED'; payload: { graphName: string; eventName: string } }
   | { type: 'EVENT_COMPLETED'; payload: { graphName: string; eventName: string; value: any } }
   | { type: 'EVENT_FAILED'; payload: { graphName: string; eventName: string; error: EventError } } 
+
+export type DependencyGroup<T> = Array<keyof T>
+export type Dependencies<T> = DependencyGroup<T> | Array<DependencyGroup<T>>
+
+// Simpler version that gives access to all possible dependencies
+export type DependencyKeys<
+  TEventPayloads extends BaseEventPayloads,
+  K extends keyof TEventPayloads
+> = Exclude<keyof TEventPayloads, K>;

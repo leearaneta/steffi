@@ -3,6 +3,7 @@ import { BaseEventPayloads, DependencyGraphOptions, EventStatus, EventError } fr
 
 export class EventManager<TEventPayloads extends BaseEventPayloads> {
   private runnables: Map<keyof TEventPayloads, (args: any) => Promise<void>> = new Map()
+  private downFunctions: Map<keyof TEventPayloads, (value: any) => Promise<void>> = new Map()
   private completedEvents: Map<keyof TEventPayloads, any> = new Map()
   private eventOptions: Map<keyof TEventPayloads, Required<DependencyGraphOptions>> = new Map()
   private eventStatus: Map<keyof TEventPayloads, EventStatus> = new Map()
@@ -14,28 +15,35 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
     options: DependencyGraphOptions = {}
   ) {
     this.defaultOptions = {
-      maxRetries: options.maxRetries ?? 3,
+      maxRetries: options.maxRetries ?? 1,
       retryDelay: options.retryDelay ?? 1000,
-      timeout: options.timeout ?? 30000
+      timeout: options.timeout ?? 1000000,
+      fireOnComplete: options.fireOnComplete ?? true
     }
   }
 
   registerEvent(
     type: keyof TEventPayloads,
-    runnable?: (args: any) => Promise<void>,
-    options: DependencyGraphOptions = {}
+    runnable: (args: any) => Promise<void>,
+    options: DependencyGraphOptions & { down?: (value: any) => Promise<void> } = {}
   ) {
+    const { down, ...restOptions } = options
     const mergedOptions = {
       ...this.defaultOptions,
-      ...options
+      ...restOptions
     }
+    
     this.eventOptions.set(type, mergedOptions)
-    this.runnables.set(type, runnable || (() => Promise.resolve()))
+    this.runnables.set(type, runnable)
+    if (down) {
+      this.downFunctions.set(type, down)
+    }
     this.eventStatus.set(type, EventStatus.PENDING)
   }
 
   deregisterEvent(type: keyof TEventPayloads) {
     this.runnables.delete(type)
+    this.downFunctions.delete(type)
     this.completedEvents.delete(type)
     this.eventOptions.delete(type)
     this.eventStatus.delete(type)
@@ -52,7 +60,7 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
   async executeEvent(type: keyof TEventPayloads, value?: any) {
     const currentStatus = this.eventStatus.get(type)
     if (currentStatus === EventStatus.COMPLETED || currentStatus === EventStatus.IN_PROGRESS) {
-      return // Don't execute if already completed or in progress
+      return
     }
 
     const options = this.eventOptions.get(type)!
@@ -132,5 +140,13 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
 
   getErrors() {
     return new Map(Array.from(this.errors).map(([k, v]) => [String(k), v]))
+  }
+
+  getDownFunction(type: keyof TEventPayloads) {
+    return this.downFunctions.get(type)
+  }
+
+  getCompletedValue(type: keyof TEventPayloads) {
+    return this.completedEvents.get(type)
   }
 } 

@@ -1,9 +1,9 @@
 import { EventEmitter } from 'events'
 import { EventManager } from './EventManager'
-import { DependencyGraphOptions, BaseEventPayloads, GraphState, EventStatus } from '../types'
+import { Dependencies, DependencyGroup, DependencyGraphOptions, BaseEventPayloads, GraphState, EventStatus } from '../types'
 
 export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends EventEmitter {
-  private dependencies: Map<keyof TEventPayloads, Set<keyof TEventPayloads>> = new Map()
+  private dependencies: Map<keyof TEventPayloads, Array<DependencyGroup<TEventPayloads>>> = new Map()
   private dependents: Map<keyof TEventPayloads, Set<keyof TEventPayloads>> = new Map()
   private eventManager: EventManager<TEventPayloads>
 
@@ -13,30 +13,24 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
   }
 
   private async tryRunEvent(type: keyof TEventPayloads) {
-    const dependencies = this.dependencies.get(type) || new Set()
-    const allDependenciesCompleted = dependencies.size === 0 || 
-      Array.from(dependencies).every(dep => 
-        this.eventManager.getStatus(dep) === EventStatus.COMPLETED
-      )
+    const dependencies = this.dependencies.get(type) || []
+    const allDependenciesCompleted = await this.checkDependenciesCompleted(dependencies)
 
     if (allDependenciesCompleted) {
-      const deps = Array.from(dependencies) as Array<keyof TEventPayloads>
-      const dependencyValues = deps.reduce((acc, dep) => ({
-        ...acc,
-        [dep]: this.eventManager.getCompletedEvents().get(String(dep))?.value
-      }), {}) as Pick<TEventPayloads, typeof deps[number]>
-      
+      const dependencyValues = this.getCompletedDependencyValues(dependencies)
       await this.eventManager.executeEvent(type, dependencyValues)
     }
   }
 
   registerEvent<TDeps extends keyof TEventPayloads>(
     type: keyof TEventPayloads,
-    dependencies: TDeps[],
+    dependencies: Dependencies<TEventPayloads>,
     runnable: (args: Pick<TEventPayloads, TDeps>) => Promise<any>,
     options: DependencyGraphOptions & { fireOnComplete?: boolean } = {}
   ) {
-    if (this.wouldCreateCycle(type, dependencies)) {
+    const normalizedDeps = this.normalizeDependencies(dependencies)
+    
+    if (this.wouldCreateCycle(type, normalizedDeps.flat())) {
       throw new Error(`Adding dependencies ${dependencies.join(', ')} to ${String(type)} would create a cycle`)
     }
 
@@ -45,7 +39,6 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
       ...options
     }
 
-    // wrap the runnable to automatically fire onComplete when event is completed
     const wrappedRunnable = finalOptions.fireOnComplete
       ? async (args: Pick<TEventPayloads, TDeps>) => {
           const value = await runnable(args)
@@ -53,8 +46,11 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
         }
       : runnable
 
-    this.dependencies.set(type, new Set(dependencies))
-    dependencies.forEach(dependency => {
+    this.dependencies.set(type, normalizedDeps)
+    
+    // Update dependents map
+    const allDeps = normalizedDeps.flat()
+    allDeps.forEach(dependency => {
       if (!this.dependents.has(dependency)) {
         this.dependents.set(dependency, new Set())
       }
@@ -62,17 +58,14 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     })
 
     this.eventManager.registerEvent(type, wrappedRunnable, finalOptions)
-    this.emit('eventRegistered', type, dependencies)
+    this.emit('eventRegistered', type, allDeps)
 
     void this.tryRunEvent(type)
   }
 
   async completeEvent<T extends keyof TEventPayloads>(type: T, value?: TEventPayloads[T]) {
     await this.eventManager.completeEvent(type, value)
-    
     const dependents = this.dependents.get(type) || new Set()
-    
-    // for each dependent, check if it can be run
     for (const dependent of dependents) {
       await this.tryRunEvent(dependent)
     }
@@ -80,8 +73,6 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
 
   async resetEvent(type: keyof TEventPayloads) {
     const dependents = this.getDependentEvents(type)
-    
-    // Reset the event itself and all its dependents
     this.eventManager.resetEvent(type)
     for (const dependent of dependents) {
       this.eventManager.resetEvent(dependent)
@@ -148,67 +139,127 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     return (this.dependents.get(type)?.size ?? 0) > 0
   }
 
-  unsafelyDeregisterEvent(type: keyof TEventPayloads) {
-    const dependents = this.getDependentEvents(type)
-    const eventsToRemove = new Set([type, ...dependents])
-    
-    for (const eventToRemove of eventsToRemove) {
-      this.dependencies.delete(eventToRemove)
-      this.eventManager.deregisterEvent(eventToRemove)
-      
-      for (const [_, dependentSet] of this.dependents) {
-        dependentSet.delete(eventToRemove)
+  deregisterEvent(type: keyof TEventPayloads, options: { 
+    cascade?: boolean,
+    force?: boolean 
+  } = {}) {
+    const { cascade = false, force = false } = options
+    const hasDependent = this.hasAnyDependents(type)
+
+    if (hasDependent && !force && !cascade) {
+      throw new Error(
+        `Cannot deregister event "${String(type)}" as it has dependents. ` +
+        `Use force: true to deregister anyway, or cascade: true to also remove dependents.`
+      )
+    }
+
+    if (cascade && hasDependent) {
+      // Remove all dependents first
+      const dependents = this.getDependentEvents(type)
+      for (const dependent of dependents) {
+        this.deregisterSingleEvent(dependent)
       }
+    }
+
+    this.deregisterSingleEvent(type)
+  }
+
+  private deregisterSingleEvent(type: keyof TEventPayloads) {
+    this.dependencies.delete(type)
+    this.eventManager.deregisterEvent(type)
+    
+    // Remove this event from all dependency lists
+    for (const [_, dependentSet] of this.dependents) {
+      dependentSet.delete(type)
     }
     
     this.dependents.delete(type)
-    for (const dependent of dependents) {
-      this.dependents.delete(dependent)
-    }
-  }
-
-  trySafelyDeregisterEvent(type: keyof TEventPayloads): boolean {
-    if (!this.hasAnyDependents(type)) {
-      this.dependencies.delete(type)
-      this.eventManager.deregisterEvent(type)
-      
-      for (const [_, dependentSet] of this.dependents) {
-        dependentSet.delete(type)
-      }
-      
-      this.dependents.delete(type)
-      return true
-    }
-    return false
   }
 
   private wouldCreateCycle(
-    newEvent: keyof TEventPayloads,
-    dependencies: Array<keyof TEventPayloads>
+    type: keyof TEventPayloads,
+    dependencies: Array<DependencyGroup<TEventPayloads>> | DependencyGroup<TEventPayloads>
   ): boolean {
+    const normalizedDeps = this.normalizeDependencies(dependencies)
+    
     const visited = new Set<keyof TEventPayloads>()
-    const visiting = new Set<keyof TEventPayloads>()
+    const currentPath = new Set<keyof TEventPayloads>()
 
-    const visit = (event: keyof TEventPayloads): boolean => {
-      if (visiting.has(event)) return true
-      if (visited.has(event)) return false
+    const hasCycle = (node: keyof TEventPayloads): boolean => {
+      visited.add(node)
+      currentPath.add(node)
 
-      visiting.add(event)
-      const deps = event === newEvent ? dependencies : this.dependencies.get(event)
-      if (deps) {
-        for (const dep of deps) {
-          if (visit(dep)) return true
+      const nodeDeps = this.dependencies.get(node)
+      if (nodeDeps) {
+        const allNodeDeps = nodeDeps.flat()
+        
+        for (const dep of allNodeDeps) {
+          if (!visited.has(dep)) {
+            if (hasCycle(dep)) return true
+          } else if (currentPath.has(dep)) {
+            return true
+          }
         }
       }
-      visiting.delete(event)
-      visited.add(event)
+
+      currentPath.delete(node)
       return false
     }
 
-    return visit(newEvent)
+    this.dependencies.set(type, normalizedDeps)
+    const result = hasCycle(type)
+    if (!this.dependencies.has(type)) {
+      this.dependencies.delete(type)
+    }
+
+    return result
   }
 
   getEventStatus(type: keyof TEventPayloads): EventStatus | undefined {
     return this.eventManager.getStatus(type)
+  }
+
+  private normalizeDependencies(
+    dependencies: Dependencies<TEventPayloads>
+  ): Array<DependencyGroup<TEventPayloads>> {
+    if (dependencies.length === 0) return []
+    if (!Array.isArray(dependencies[0])) {
+      return [dependencies as DependencyGroup<TEventPayloads>]
+    }
+    return dependencies as Array<DependencyGroup<TEventPayloads>>
+  }
+
+  private async checkDependenciesCompleted(
+    dependencyGroups: Array<DependencyGroup<TEventPayloads>>
+  ): Promise<boolean> {
+    // no dependencies = completed
+    if (dependencyGroups.length === 0) return true
+
+    return dependencyGroups.some(group =>
+      group.every(dep =>
+        this.eventManager.getStatus(dep) === EventStatus.COMPLETED
+      )
+    )
+  }
+
+  private getCompletedDependencyValues<TDeps extends keyof TEventPayloads>(
+    dependencyGroups: Array<DependencyGroup<TEventPayloads>>
+  ): Pick<TEventPayloads, TDeps> {
+    // Find first completed group
+    const completedGroup = dependencyGroups.find(group =>
+      group.every(dep =>
+        this.eventManager.getStatus(dep) === EventStatus.COMPLETED
+      )
+    )
+
+    if (!completedGroup) {
+      return {} as Pick<TEventPayloads, TDeps>
+    }
+
+    // Return values from completed group
+    return completedGroup.reduce((acc, dep) => ({
+      ...acc,
+      [dep]: this.eventManager.getCompletedEvents().get(String(dep))?.value
+    }), {}) as Pick<TEventPayloads, TDeps>
   }
 } 
