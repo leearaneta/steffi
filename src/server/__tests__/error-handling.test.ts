@@ -19,6 +19,7 @@ describe('DependencyGraph - Error Handling', () => {
       maxRetries: 2,
       retryDelay: 10
     })
+    graph.activate()
 
     await graph.completeEvent('initial')
 

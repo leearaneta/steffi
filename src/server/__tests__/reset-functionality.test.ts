@@ -34,44 +34,4 @@ describe('DependencyGraph - Reset Functionality', () => {
     expect(event3Fn).toHaveBeenCalledTimes(2)
   })
 
-  it('resets events completed before a specific time', async () => {
-    const graph = new DependencyGraph<{
-      event1: void
-      event2: void
-    }>()
-  
-    const event1Fn = jest.fn().mockResolvedValue('completed')
-    const event2Fn = jest.fn().mockResolvedValue('completed')
-
-    graph.registerEvent('event1', [], event1Fn)
-    const now = new Date()
-    const pastTime = new Date(now.getTime() - 1000)
-    const futureTime = new Date(now.getTime() + 1000)
-
-    // Wait for event1 to complete
-    await new Promise(resolve => setTimeout(resolve, 50))
-
-    graph.registerEvent('event2', [], event2Fn)
-    // Wait for event2 to complete
-    await new Promise(resolve => setTimeout(resolve, 50))
-
-    // Verify initial state
-    expect(event1Fn).toHaveBeenCalledTimes(1)
-    expect(event2Fn).toHaveBeenCalledTimes(1)
-
-    await graph.resetEventsAfterTime(futureTime)
-    await new Promise(resolve => setTimeout(resolve, 50))
-    expect(event1Fn).toHaveBeenCalledTimes(1) // No change
-    expect(event2Fn).toHaveBeenCalledTimes(1) // No change
-
-    await graph.resetEventsAfterTime(now)
-    await new Promise(resolve => setTimeout(resolve, 50))
-    expect(event1Fn).toHaveBeenCalledTimes(1) // No change
-    expect(event2Fn).toHaveBeenCalledTimes(2) // event2 rerun
-
-    await graph.resetEventsAfterTime(pastTime)
-    await new Promise(resolve => setTimeout(resolve, 50))
-    expect(event1Fn).toHaveBeenCalledTimes(2) // event1 rerun
-    expect(event2Fn).toHaveBeenCalledTimes(3) // event2 rerun again
-  })
 }) 

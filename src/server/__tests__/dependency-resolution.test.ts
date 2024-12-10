@@ -15,6 +15,7 @@ describe('DependencyGraph - Dependency Resolution', () => {
 
     graph.registerEvent('event2', ['event1'], event2Handler)
     graph.registerEvent('event3', ['event1', 'event2', 'initial'], event3Handler)
+    graph.activate()
 
     await graph.completeEvent('event1', { value: 1 })
 

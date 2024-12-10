@@ -18,6 +18,7 @@ describe('DependencyGraph - Predicate Dependencies', () => {
         }
       ]
     })
+    graph.activate()
 
     await graph.completeEvent('a', 3)
     await graph.completeEvent('b', 4)

@@ -7,10 +7,13 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
   private dependents = {} as Record<keyof TEventPayloads, Set<keyof TEventPayloads>>
   private eventManager: EventManager<TEventPayloads>
   private predicates = {} as Record<keyof TEventPayloads, DependencyPredicate<TEventPayloads>[]>
+  private defaultOptions: DependencyGraphOptions = {}
+  private isActive = false
 
   constructor(options: DependencyGraphOptions = {}) {
     super()
     this.eventManager = new EventManager(this, options)
+    this.defaultOptions = options
   }
 
   private async tryRunEvent(type: keyof TEventPayloads) {
@@ -25,14 +28,14 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
   registerEvent<TDeps extends keyof TEventPayloads>(
     type: keyof TEventPayloads,
     dependencies: Dependencies<TEventPayloads>,
-    runnable: (args: Pick<TEventPayloads, TDeps>) => Promise<void>,
+    runnable: (args: Pick<TEventPayloads, TDeps>) => Promise<TEventPayloads[typeof type]>,
     options?: EventOptions<TEventPayloads> & { fireOnComplete?: true }
   ): void;
 
   registerEvent<TDeps extends keyof TEventPayloads>(
     type: keyof TEventPayloads,
     dependencies: Dependencies<TEventPayloads>,
-    runnable: (args: Pick<TEventPayloads, TDeps>) => Promise<TEventPayloads[typeof type]>,
+    runnable: (args: Pick<TEventPayloads, TDeps>) => Promise<void>,
     options: EventOptions<TEventPayloads> & { fireOnComplete: false }
   ): void;
 
@@ -42,6 +45,10 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     runnable: (args: Pick<TEventPayloads, TDeps>) => Promise<TEventPayloads[typeof type]>,
     options: EventOptions<TEventPayloads> = {}
   ) {
+    if (this.isActive) {
+      throw new Error('Cannot register events after graph has been activated')
+    }
+
     this.predicates[type] = options.predicates || []
 
     const decomposed = this.decomposeDependencies(dependencies)
@@ -53,8 +60,9 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
       }
     })
 
-    options.fireOnComplete = options.fireOnComplete ?? true
-    const wrappedRunnable = options.fireOnComplete
+    const eventOptions = { ...this.defaultOptions, ...options }
+    eventOptions.fireOnComplete = eventOptions.fireOnComplete ?? true
+    const wrappedRunnable = eventOptions.fireOnComplete
       ? async (args: Pick<TEventPayloads, TDeps>) => {
           const value = await runnable(args)
           await this.completeEvent(type, value)
@@ -71,8 +79,6 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
 
     this.eventManager.registerEvent(type, wrappedRunnable, options)
     this.emit('eventRegistered', type, allDeps)
-
-    void this.tryRunEvent(type)
   }
 
   async completeEvent(type: keyof TEventPayloads, value?: TEventPayloads[typeof type]) {
@@ -91,13 +97,6 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     }
 
     await this.tryRunEvent(type)
-  }
-
-  async resetEventsAfterTime(time: Date) {
-    const resetEvents = this.eventManager.resetEventsAfterTime(time)
-    for (const event of resetEvents) {
-      await this.tryRunEvent(event)
-    }
   }
 
   getGraph(): GraphState {
@@ -140,40 +139,21 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     return allDependents
   }
 
-  private hasAnyDependents(type: keyof TEventPayloads): boolean {
-    return (this.dependents[type]?.size ?? 0) > 0
-  }
-
-  deregisterEvent(type: keyof TEventPayloads, options: { cascade?: boolean, force?: boolean } = {}) {
-    const { cascade = false, force = false } = options
-    const hasDependent = this.hasAnyDependents(type)
-
-    if (hasDependent && !force && !cascade) {
-      throw new Error(
-        `Cannot deregister event "${String(type)}" as it has dependents. ` +
-        `Use force: true to deregister anyway, or cascade: true to also remove dependents.`
-      )
-    }
-
-    if (cascade && hasDependent) {
-      const dependents = this.getDependentEvents(type)
-      for (const dependent of dependents) {
-        this.deregisterSingleEvent(dependent)
+  activate(): void {
+    if (this.isActive) return
+    
+    this.isActive = true
+    
+    // Try to run all registered events that have no dependencies
+    Object.keys(this.dependencies).forEach(type => {
+      if (this.dependencies[type][0].length === 0) {
+        void this.tryRunEvent(type)
       }
-    }
-
-    this.deregisterSingleEvent(type)
+    })
   }
 
-  private deregisterSingleEvent(type: keyof TEventPayloads) {
-    delete this.dependencies[type]
-    this.eventManager.deregisterEvent(type)
-    
-    for (const dependentSet of Object.values(this.dependents)) {
-      dependentSet.delete(type)
-    }
-    
-    delete this.dependents[type]
+  isGraphActive(): boolean {
+    return this.isActive
   }
 
   private wouldCreateCycle(

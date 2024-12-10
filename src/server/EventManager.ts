@@ -114,21 +114,6 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
     delete this.errors[type]
   }
 
-  resetEventsAfterTime(time: Date): Set<keyof TEventPayloads> {
-    const eventsToReset = new Set<keyof TEventPayloads>()
-    
-    for (const [key, timestamp] of Object.entries(this.completedTimestamps)) {
-      if (timestamp > time.getTime()) {
-        eventsToReset.add(key as keyof TEventPayloads)
-      }
-    }
-
-    for (const eventType of eventsToReset) {
-      this.resetEvent(eventType)
-    }
-
-    return eventsToReset
-  }
 
   getCompletedEvents() {
     return this.completedEvents

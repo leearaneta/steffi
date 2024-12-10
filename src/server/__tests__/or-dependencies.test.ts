@@ -15,6 +15,7 @@ it('handles shared dependencies between OR groups', async () => {
       'coffee',
       { or: [['carpool'], ['car', 'parkingPass']] }
     ], mockRunnable)
+    graph.activate()
 
     // have predicate at top level
     // OR must contains subarrays

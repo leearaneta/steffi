@@ -8,15 +8,11 @@ describe('DependencyGraph - Automatic Completion', () => {
       target: boolean
     }>()
 
-    await graph.completeEvent('dep1', 'hello')
-
     const mockRunnable = jest.fn().mockResolvedValue(undefined)
-    graph.registerEvent(
-      'target',
-      ['dep1'],
-      mockRunnable
-    )
-
+    graph.registerEvent('target', ['dep1'], mockRunnable)
+    graph.activate()
+    
+    await graph.completeEvent('dep1', 'hello')
     await new Promise(resolve => setImmediate(resolve))
 
     expect(graph.getEventStatus('target')).toBe(EventStatus.COMPLETED)
@@ -28,8 +24,6 @@ describe('DependencyGraph - Automatic Completion', () => {
       target: boolean
     }>()
 
-    await graph.completeEvent('dep1', 'hello')
-
     const mockRunnable = jest.fn().mockResolvedValue(undefined)
     graph.registerEvent(
       'target',
@@ -37,6 +31,9 @@ describe('DependencyGraph - Automatic Completion', () => {
       mockRunnable,
       { fireOnComplete: false }
     )
+
+    graph.activate()
+    await graph.completeEvent('dep1', 'hello')
 
     await new Promise(resolve => setImmediate(resolve))
 

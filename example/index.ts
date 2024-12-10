@@ -1,7 +1,6 @@
 import { DependencyGraph, GraphRegistry } from '../src'
 
 interface PotionBrewing {
-  init: void
   heatSolution: {
     temperatureC: number
     timeSeconds: number
@@ -33,7 +32,7 @@ interface PotionBrewing {
 
 const graph = new DependencyGraph<PotionBrewing>({ maxRetries: 0 })
 
-graph.registerEvent('heatSolution', ['init'], async () => {
+graph.registerEvent('heatSolution', [], async () => {
   console.log('Heating solution to reaction temperature...')
   await new Promise(resolve => setTimeout(resolve, 1000))
   return {
@@ -105,7 +104,7 @@ graph.registerEvent('analyze',
 const registry = GraphRegistry.getInstance()
 registry.registerGraph('synthesis', graph)
 registry.startVisualizationServer(3000)
-graph.completeEvent('init')
+graph.activate()
 
 console.log('Visualization server started at http://localhost:3000')
 console.log('Beginning synthesis process...\n')
