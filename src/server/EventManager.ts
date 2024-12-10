@@ -2,7 +2,10 @@ import { EventEmitter } from 'events'
 import { BaseEventPayloads, DependencyGraphOptions, EventStatus, EventError } from '../types'
 
 export class EventManager<TEventPayloads extends BaseEventPayloads> {
-  private runnables = {} as Record<keyof TEventPayloads, (args: Pick<TEventPayloads, keyof TEventPayloads>) => Promise<void>>
+  private runnables = {} as Record<
+    keyof TEventPayloads, 
+    (args: Pick<TEventPayloads, Extract<keyof TEventPayloads, string>>) => Promise<void>
+  >
   private completedEvents = {} as {[K in keyof TEventPayloads]: TEventPayloads[K]}
   private completedTimestamps = {} as Record<keyof TEventPayloads, number>
   private eventOptions = {} as Record<keyof TEventPayloads, Required<DependencyGraphOptions>>
@@ -54,7 +57,10 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
     delete this.errors[type]
   }
 
-  async executeEvent(type: keyof TEventPayloads, eventArgs: Pick<TEventPayloads, keyof TEventPayloads>) {
+  async executeEvent(
+    type: keyof TEventPayloads, 
+    eventArgs: Pick<TEventPayloads, Extract<keyof TEventPayloads, string>>
+  ) {
     const currentStatus = this.eventStatus[type]
     if (currentStatus === EventStatus.COMPLETED || currentStatus === EventStatus.IN_PROGRESS) {
       return

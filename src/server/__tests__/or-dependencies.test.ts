@@ -12,9 +12,12 @@ it('handles shared dependencies between OR groups', async () => {
     const mockRunnable = jest.fn().mockResolvedValue('success')
 
     graph.registerEvent('target', [
-      ['car', 'parkingPass', 'coffee'],
-      ['carpool', 'coffee']
+      'coffee',
+      { or: [['carpool'], ['car', 'parkingPass']] }
     ], mockRunnable)
+
+    // have predicate at top level
+    // OR must contains subarrays
 
     // Complete shared dependency first
     await graph.completeEvent('coffee', 'espresso')
