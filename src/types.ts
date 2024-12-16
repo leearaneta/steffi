@@ -25,7 +25,7 @@ export type EventOptions<T extends BaseEventPayloads> = DependencyGraphOptions &
 }
 
 export interface EventError {
-  error: string;
+  message: string;
   timestamp: number;
 }
 

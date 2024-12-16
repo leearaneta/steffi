@@ -50,11 +50,14 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
   }
 
   async completeEvent(type: keyof TEventPayloads, value?: TEventPayloads[typeof type]) {
+    if ([EventStatus.FAILED, EventStatus.COMPLETED].includes(this.eventStatus[type])) {
+      console.warn('event already completed', type)
+      return
+    }
     this.completedEvents[type] = value
     this.completedTimestamps[type] = Date.now()
     this.eventStatus[type] = EventStatus.COMPLETED
     this.emitter.emit('eventCompleted', type, value)
-    delete this.errors[type]
   }
 
   async executeEvent(
@@ -92,15 +95,14 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
           await new Promise(resolve => setTimeout(resolve, retryDelay))
           return executeWithRetries(retryCount + 1)
         }
-        
         this.eventStatus[type] = EventStatus.FAILED
         const eventError: EventError = {
-          error: error instanceof Error ? error.message : String(error),
+          message: error instanceof Error ? error.message : String(error),
           timestamp: Date.now()
         }
-        this.emitter.emit('eventFailed', type, eventError)  
+        this.emitter.emit('eventFailed', type, eventError)
         this.errors[type] = eventError
-        throw error
+        console.error('event failed', type, eventError)
       }
     }
 
@@ -114,6 +116,21 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
     delete this.errors[type]
   }
 
+  resetEventsAfterTime(time: Date): Set<keyof TEventPayloads> {
+    const eventsToReset = new Set<keyof TEventPayloads>()
+    
+    for (const [key, timestamp] of Object.entries(this.completedTimestamps)) {
+      if (timestamp > time.getTime()) {
+        eventsToReset.add(key as keyof TEventPayloads)
+      }
+    }
+
+    for (const eventType of eventsToReset) {
+      this.resetEvent(eventType)
+    }
+
+    return eventsToReset
+  }
 
   getCompletedEvents() {
     return this.completedEvents

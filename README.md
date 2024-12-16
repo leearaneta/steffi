@@ -1,6 +1,16 @@
 # Steffi
 
-A TypeScript library for DAG (directed acyclic graph) execution. (named after [Steffi Graf](https://en.wikipedia.org/wiki/Steffi_Graf))
+A TypeScript library for building and visualizing type-safe dependency graphs. ( named after [Steffi Graf](https://en.wikipedia.org/wiki/Steffi_Graf))
+
+## Features
+
+- 🎯 Type-safe event registration and execution
+- 🔄 Complex dependency management with AND/OR conditions
+- 🎨 Built-in visualization server
+- 🔍 Real-time event monitoring
+- ⚡ Automatic retry and timeout handling
+- 🛡️ Cycle detection
+- 🔄 Event reset capabilities
 
 ## Installation
 
@@ -8,144 +18,147 @@ A TypeScript library for DAG (directed acyclic graph) execution. (named after [S
 npm install steffi
 ```
 
-## Usage
-
-### Basic Example
+## Basic Usage
 
 ```typescript
-import { DependencyGraph, GraphRegistry } from 'steffi'
+import { DependencyGraph } from 'steffi'
 
-// Define your event return types
-interface MyEvents {
-  init: void
-  fetchUser: { userData: any }
-  loadProfile: { profileData: any }
+// Define your event types
+interface Events {
+  fetchUser: { id: string; name: string }
+  loadProfile: { profile: any }
   loadPosts: { posts: any[] }
 }
 
 // Create a graph
-const graph = new DependencyGraph<MyEvents>()
+const graph = new DependencyGraph<Events>()
 
 // Register events with dependencies
 graph.registerEvent(
   'fetchUser',
-  ['init'], // depends on init
+  [], // no dependencies
   async () => {
-    const response = await fetch(`/api/user/123`)
-    const userData = await response.json()
-    return userData
-  },
+    const response = await fetch('/api/user/123')
+    return response.json()
+  }
 )
 
 graph.registerEvent(
   'loadProfile',
   ['fetchUser'], // depends on fetchUser
-  async ({ fetchUser: userData }) => {
-    // Use the userData from fetchUser event
-    return { profile: userData }
+  async ({ fetchUser }) => {
+    const profile = await fetch(`/api/profiles/${fetchUser.id}`)
+    return { profile: await profile.json() }
   }
 )
 
-graph.registerEvent(
-  'loadPosts',
-  ['fetchUser'], // also depends on fetchUser
-  async ({ fetchUser: userData }) => {
-    const posts = await fetch(`/api/users/${userData.id}/posts`)
-    return posts.json()
-  }
-)
+// Activate and start the graph; any events without dependencies will run immediately
+graph.activate()
+```
 
-// AND dependencies (all must complete)
-graph.registerEvent('makeSandwich', ['getBread', 'getFillings'], 
-  async ({ getBread, getFillings }) => {
-    // Need both bread AND fillings for a sandwich!
-  }
-)
+## Advanced Features
 
-// OR dependencies (any group must complete)
+### OR Dependencies
+
+Events can have OR dependencies, where only one group needs to be satisfied:
+
+```typescript
 graph.registerEvent('getToWork', [
-  ['bicycle', 'helmet'],              // Group 1: Bike to work
-  ['busPass', 'exactChange'],         // Group 2: Take the bus
-  ['car', 'parkingPass', 'coffee'],   // Group 3: Drive (coffee mandatory)
-  ['teleportDevice']                  // Group 4: Future commute
+  ['bicycle', 'helmet'],         // Option 1: Bike to work
+  ['busPass', 'exactChange'],    // Option 2: Take the bus
+  ['car', 'parkingPass']         // Option 3: Drive
 ], async (deps) => {
-  // Requires EITHER
-  // (bicycle AND helmet) OR
-  // (busPass AND exactChange) OR
-  // (car AND parkingPass AND coffee) OR
-  // (teleportDevice)
+  // Will run when ANY group is complete
 })
+```
 
-// Trigger the graph
-await graph.completeEvent('init')
+### Predicates
+
+Predicates allow you to add conditional logic to when events should execute. Events will only run when all their predicates return true:
+
+```typescript
+graph.registerEvent('submitOrder', ['cart', 'userInfo'], handler, {
+  predicates: [
+    {
+      required: ['cart'],
+      fn: ({ cart }) => cart.items.length > 0,
+      name: 'cartNotEmpty'  // optional name for debugging
+    },
+    {
+      required: ['cart', 'userInfo'],
+      fn: ({ cart, userInfo }) => cart.total <= userInfo.creditLimit
+    }
+  ]
+})
+```
+
+Multiple predicates are evaluated with AND logic - all must be satisfied. Each predicate:
+- Can access any subset of dependencies via `required`
+- Must return a boolean
+- Is evaluated whenever its required dependencies change
+- Can have an optional name for debugging
+
+### Event Options
+
+```typescript
+graph.registerEvent('criticalTask', ['dependency'], handler, {
+  maxRetries: 3,           // Retry failed events
+  retryDelay: 1000,        // Wait between retries (ms)
+  timeout: 5000,           // Maximum execution time (ms)
+  fireOnComplete: false    // Manual completion mode
+})
 ```
 
 ### Visualization
 
 ```typescript
-// Start the visualization server
+import { GraphRegistry } from 'steffi'
+
 const registry = GraphRegistry.getInstance()
-registry.registerGraph('userFlow', graph)
+registry.registerGraph('myGraph', graph)
 registry.startVisualizationServer(3000)
 ```
 
-Then open `http://localhost:3000` in your browser to view your graph.
+Then open `http://localhost:3000` to see your graph visualization.
+
+### Manual Event Completion
+
+By default, events automatically complete when their handler finishes. You can override this with `fireOnComplete: false` to manually control when events complete:
+
+```typescript
+// Registration
+graph.registerEvent('validateOrder', ['cart'], 
+  async ({ cart }) => {
+    // This won't automatically complete the event
+    await validateItems(cart)
+  }, 
+  { fireOnComplete: false }
+)
+
+// Later, manually complete the event
+await graph.completeEvent('validateOrder', { isValid: true })
+```
 
 ## API Reference
 
 ### DependencyGraph
 
-#### `registerEvent(type, dependencies, runnable, options?)`
-
-Register a new event with its dependencies and execution function.
-
-- `type`: The name/key of the event
-- `dependencies`: Can be specified in two formats:
-  - Array of dependencies (AND logic): `['dep1', 'dep2']` requires all dependencies to be completed
-  - Array of dependency groups (OR logic): `[['dep1', 'dep2'], ['dep3', 'dep4']]` requires all dependencies within any group to be completed
-- `runnable`: Function that receives values from completed dependencies as arguments
-- `options`: Optional configuration object
-  - `fireOnComplete`: Set to `false` to handle completion manually with `completeEvent`
-  - `maxRetries`: Number of retry attempts for failed events
-  - `retryDelay`: Delay between retries in milliseconds
-  - `timeout`: Maximum execution time in milliseconds
-
-Examples:
-
-- `registerEvent('myEvent', [], handler, {
-  maxRetries: 3,
-  fireOnComplete: true,
-  retryDelay: 1000, // ms
-  timeout: 5000 // ms
-})`
-
-- `registerEvent('myEvent', [], handler, {
-  maxRetries: 3,
-  fireOnComplete: false,
-  retryDelay: 1000, // ms
-  timeout: 5000 // ms
-})`
+- `registerEvent(type, dependencies, handler, options?)`
+- `completeEvent(type, value?)`
+- `resetEvent(type)` // this will reset the event and all its dependents, and refire the event
+- `activate()`
+- `getEventStatus(type)`
 
 ### GraphRegistry
 
-- `getInstance()`: Get singleton instance
-- `registerGraph(name, graph)`: Register a graph for visualization
-- `startVisualizationServer(port)`: Start the visualization server
+- `getInstance()`
+- `registerGraph(name, graph)`
+- `startVisualizationServer(port)`
 
-## Configuration
+## Example
 
-```typescript
-// Configure event options
-graph.registerEvent('myEvent', [], handler, {
-  maxRetries: 3,
-  fireOnComplete: true,
-  retryDelay: 1000, // ms
-  timeout: 5000 // ms
-})
-```
+For a complete example, see the potion brewing simulation in the example directory.
 
-## TODO: separate visualization server from rest of library
+## License
 
-### Deregistering Events
-
-Remove an event from the graph using `deregisterEvent`. By default, this will only succeed if the event has no dependents.
+MIT

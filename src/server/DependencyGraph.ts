@@ -8,6 +8,7 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
   private eventManager: EventManager<TEventPayloads>
   private predicates = {} as Record<keyof TEventPayloads, DependencyPredicate<TEventPayloads>[]>
   private defaultOptions: DependencyGraphOptions = {}
+  private frozenEvents = new Set<keyof TEventPayloads>()
   private isActive = false
 
   constructor(options: DependencyGraphOptions = {}) {
@@ -17,6 +18,7 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
   }
 
   private async tryRunEvent(type: keyof TEventPayloads) {
+    if (this.frozenEvents.has(type)) return
     const dependencies = this.dependencies[type] || []
     const values = this.checkDependenciesAndGetValues(type, dependencies)
     if (values) {
@@ -82,21 +84,50 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
   }
 
   async completeEvent(type: keyof TEventPayloads, value?: TEventPayloads[typeof type]) {
+    if (!this.isActive) {
+      throw new Error('Cannot complete events before graph has been activated')
+    }
     await this.eventManager.completeEvent(type, value)
     const dependents = this.dependents[type] || new Set()
     for (const dependent of dependents) {
-      await this.tryRunEvent(dependent)
+      void this.tryRunEvent(dependent)
     }
+  }
+
+  freezeEvent(type: keyof TEventPayloads) {
+    this.frozenEvents.add(type)
+  }
+
+  unfreezeEvent(type: keyof TEventPayloads) {
+    this.frozenEvents.delete(type)
   }
 
   async resetEvent(type: keyof TEventPayloads) {
     const dependents = this.getDependentEvents(type)
+    const eventsInProgress = [...dependents, type].filter(event =>
+      this.eventManager.getStatus(event) === EventStatus.IN_PROGRESS
+    )
+    dependents.forEach(event => this.freezeEvent(event))
+    try {
+      // wait for events to complete, and prevent dependents from running
+      await Promise.all(eventsInProgress.map(event => this.waitForEvent(event)))
+    } catch (e) {
+      // ignore errors
+    }
+    dependents.forEach(event => this.unfreezeEvent(event))
     this.eventManager.resetEvent(type)
-    for (const dependent of dependents) {
-      this.eventManager.resetEvent(dependent)
+    for (const event of dependents) {
+      this.eventManager.resetEvent(event)
     }
 
-    await this.tryRunEvent(type)
+    void this.tryRunEvent(type)
+  }
+
+  async resetEventsAfterTime(time: Date) {
+    const resetEvents = this.eventManager.resetEventsAfterTime(time)
+    for (const event of resetEvents) {
+      void this.tryRunEvent(event)
+    }
   }
 
   getGraph(): GraphState {
@@ -263,4 +294,34 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
 
     return null
   }
+
+  waitForEvent(type: keyof TEventPayloads): Promise<TEventPayloads[typeof type]> {
+    if (this.eventManager.getStatus(type) === EventStatus.COMPLETED) {
+      return Promise.resolve(this.eventManager.getCompletedEvents()[type])
+    } else if (this.eventManager.getStatus(type) === EventStatus.FAILED) {
+      return Promise.reject(this.eventManager.getErrors()[type])
+    }
+
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        this.off('eventCompleted', successListener)
+        this.off('eventFailed', failureListener)
+      }
+      const successListener = (eventName: string, value: TEventPayloads[typeof type]) => {
+        if (eventName === type) {
+          resolve(value)
+          cleanup()
+        }
+      }
+      const failureListener = (eventName: string, error: Error) => {
+        if (eventName === type) {
+          reject(error)
+          cleanup()
+        }
+      }
+      this.on('eventCompleted', successListener)
+      this.on('eventFailed', failureListener)
+    })
+  }
 } 
+

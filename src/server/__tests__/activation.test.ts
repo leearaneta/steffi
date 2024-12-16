@@ -36,7 +36,7 @@ describe('DependencyGraph - Activation', () => {
     await new Promise(resolve => setTimeout(resolve, 50))
     
     expect(handler1).toHaveBeenCalled()
-    expect(handler2).not.toHaveBeenCalled() // Waiting for event1
+    expect(handler2).not.toHaveBeenCalled()
     expect(handler3).toHaveBeenCalled()
   })
 

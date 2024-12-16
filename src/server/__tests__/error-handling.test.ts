@@ -10,7 +10,7 @@ describe('DependencyGraph - Error Handling', () => {
 
     let tries = 0
 
-    graph.registerEvent('event1', ['initial'], async () => {
+    graph.registerEvent('event1', [], async () => {
       tries++
       if (tries < 2) {
         throw new Error('failure')
@@ -21,7 +21,7 @@ describe('DependencyGraph - Error Handling', () => {
     })
     graph.activate()
 
-    await graph.completeEvent('initial')
+    await graph.waitForEvent('event1')
 
     expect(tries).toBe(2)
     expect(graph.getEventStatus('event1')).toBe(EventStatus.COMPLETED)
@@ -35,13 +35,15 @@ describe('DependencyGraph - Error Handling', () => {
 
     const handler = jest.fn().mockRejectedValue(new Error('always fail'))
 
-    graph.registerEvent('event1', ['initial'], handler, {
+    graph.registerEvent('event1', [], handler, {
       maxRetries: 2,
       retryDelay: 10
     })
 
+    graph.activate()
+
     try {
-      await graph.completeEvent('initial')
+      await graph.waitForEvent('event1')
     } catch (e) {
       // expected to throw
     }
@@ -56,14 +58,15 @@ describe('DependencyGraph - Error Handling', () => {
       event1: void
     }>()
 
-    graph.registerEvent('event1', ['initial'], async () => {
-      await new Promise(resolve => setTimeout(resolve, 50))
+    graph.registerEvent('event1', [], async () => {
+      await new Promise(resolve => setTimeout(resolve, 10000))
     }, {
       timeout: 10
     })
+    graph.activate()
 
     try {
-      await graph.completeEvent('initial')
+      await graph.waitForEvent('event1')
     } catch (e) {
       expect(e.message).toContain('timed out')
     }
