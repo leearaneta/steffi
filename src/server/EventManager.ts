@@ -6,11 +6,12 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
     keyof TEventPayloads, 
     (args: Pick<TEventPayloads, Extract<keyof TEventPayloads, string>>) => Promise<void>
   >
-  private completedEvents = {} as {[K in keyof TEventPayloads]: TEventPayloads[K]}
-  private completedTimestamps = {} as Record<keyof TEventPayloads, number>
-  private eventOptions = {} as Record<keyof TEventPayloads, Required<DependencyGraphOptions>>
-  private eventStatus = {} as Record<keyof TEventPayloads, EventStatus>
-  private errors = {} as Record<keyof TEventPayloads, EventError>
+  completedEvents = {} as {[K in keyof TEventPayloads]: TEventPayloads[K]}
+  completedTimestamps = {} as Record<keyof TEventPayloads, number>
+  eventOptions = {} as Record<keyof TEventPayloads, Required<DependencyGraphOptions>>
+  eventStatus = {} as Record<keyof TEventPayloads, EventStatus>
+  errors = {} as Record<keyof TEventPayloads, EventError>
+  failedTimestamps = {} as Record<keyof TEventPayloads, number>
   private readonly defaultOptions: Required<DependencyGraphOptions>
 
   constructor(
@@ -49,26 +50,28 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
     delete this.errors[type]
   }
 
-  async completeEvent(type: keyof TEventPayloads, value?: TEventPayloads[typeof type]) {
+  async completeEvent(
+    type: keyof TEventPayloads, 
+    value: TEventPayloads[typeof type], 
+    at: Date
+  ): Promise<void> {
     if ([EventStatus.FAILED, EventStatus.COMPLETED].includes(this.eventStatus[type])) {
-      console.warn('event already completed', type)
+      console.warn(
+        'event already',
+        this.eventStatus[type] === EventStatus.FAILED ? 'failed' : 'completed',
+        type
+      )
       return
     }
     this.completedEvents[type] = value
-    this.completedTimestamps[type] = Date.now()
+    this.completedTimestamps[type] = at ? at.getTime() : Date.now()
     this.eventStatus[type] = EventStatus.COMPLETED
-    this.emitter.emit('eventCompleted', type, value)
   }
 
   async executeEvent(
     type: keyof TEventPayloads, 
     eventArgs: Pick<TEventPayloads, Extract<keyof TEventPayloads, string>>
   ) {
-    const currentStatus = this.eventStatus[type]
-    if (currentStatus === EventStatus.COMPLETED || currentStatus === EventStatus.IN_PROGRESS) {
-      return
-    }
-
     const options = this.eventOptions[type] ?? this.defaultOptions
     const { maxRetries, retryDelay, timeout } = options
 
@@ -95,18 +98,29 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
           await new Promise(resolve => setTimeout(resolve, retryDelay))
           return executeWithRetries(retryCount + 1)
         }
-        this.eventStatus[type] = EventStatus.FAILED
-        const eventError: EventError = {
-          message: error instanceof Error ? error.message : String(error),
-          timestamp: Date.now()
-        }
-        this.emitter.emit('eventFailed', type, eventError)
-        this.errors[type] = eventError
+        const eventError: EventError = error instanceof Error ? error.message : String(error)
+        const now = new Date()
+        this.failEvent(type, eventError, now)
+        this.emitter.emit('eventFailed', type, eventError, now)
         console.error('event failed', type, eventError)
       }
     }
 
     await executeWithRetries()
+  }
+
+  failEvent(type: keyof TEventPayloads, error: EventError, at: Date) {
+    if ([EventStatus.FAILED, EventStatus.COMPLETED].includes(this.eventStatus[type])) {
+      console.warn(
+        'event already',
+        this.eventStatus[type] === EventStatus.FAILED ? 'failed' : 'completed',
+        type
+      )
+      return
+    }
+    this.failedTimestamps[type] = at.getTime()
+    this.eventStatus[type] = EventStatus.FAILED
+    this.errors[type] = error
   }
 
   resetEvent(type: keyof TEventPayloads) {
@@ -132,27 +146,15 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
     return eventsToReset
   }
 
-  getCompletedEvents() {
-    return this.completedEvents
-  }
-
-  getCompletedTimestamps() {
-    return this.completedTimestamps
-  }
-
   getStatus(type: keyof TEventPayloads): EventStatus | undefined {
     return this.eventStatus[type]
   }
 
-  getAllStatuses() {
-    return this.eventStatus
-  }
-
-  getErrors() {
-    return this.errors
-  }
-
   getCompletedValue(type: keyof TEventPayloads) {
     return this.completedEvents[type]
+  }
+
+  getError(type: keyof TEventPayloads) {
+    return this.errors[type]
   }
 } 

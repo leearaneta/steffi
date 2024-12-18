@@ -114,6 +114,10 @@ export const useStore = create<Store>((set) => ({
               errors: {
                 ...graph.errors,
                 [eventName]: error
+              },
+              failedTimestamps: {
+                ...graph.failedTimestamps,
+                [eventName]: Date.now()
               }
             }
           }

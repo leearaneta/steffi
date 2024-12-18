@@ -133,11 +133,11 @@ export const App: React.FC = () => {
             <h3>Errors</h3>
             <ul className="error-list">
               {Object.entries(currentGraph.errors).map(([eventId, error]) => (
-                <li key={`${eventId}-${error.timestamp}`} className="error-item">
+                <li key={`${eventId}-${currentGraph?.failedTimestamps[eventId]}`} className="error-item">
                   <span className="error-event">Event: {eventId}</span>
-                  <span className="error-message">{error.error}</span>
+                  <span className="error-message">{error}</span>
                   <span className="error-time">
-                    {new Date(error.timestamp).toLocaleString()}
+                    {new Date(currentGraph.failedTimestamps[eventId]).toLocaleString()}
                   </span>
                 </li>
               ))}

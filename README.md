@@ -1,6 +1,6 @@
 # Steffi
 
-A TypeScript library for building and visualizing type-safe dependency graphs. ( named after [Steffi Graf](https://en.wikipedia.org/wiki/Steffi_Graf))
+A TypeScript library for building and visualizing type-safe, event-driven, directed graphs. (named after [Steffi Graf](https://en.wikipedia.org/wiki/Steffi_Graf))
 
 ## Features
 
@@ -23,17 +23,14 @@ npm install steffi
 ```typescript
 import { DependencyGraph } from 'steffi'
 
-// Define your event types
 interface Events {
   fetchUser: { id: string; name: string }
   loadProfile: { profile: any }
   loadPosts: { posts: any[] }
 }
 
-// Create a graph
 const graph = new DependencyGraph<Events>()
 
-// Register events with dependencies
 graph.registerEvent(
   'fetchUser',
   [], // no dependencies
@@ -52,7 +49,7 @@ graph.registerEvent(
   }
 )
 
-// Activate and start the graph; any events without dependencies will run immediately
+// activate and start the graph; any events without dependencies will run immediately
 graph.activate()
 ```
 
@@ -63,12 +60,13 @@ graph.activate()
 Events can have OR dependencies, where only one group needs to be satisfied:
 
 ```typescript
-graph.registerEvent('getToWork', [
-  ['bicycle', 'helmet'],         // Option 1: Bike to work
-  ['busPass', 'exactChange'],    // Option 2: Take the bus
-  ['car', 'parkingPass']         // Option 3: Drive
-], async (deps) => {
-  // Will run when ANY group is complete
+graph.registerEvent('getToWork', { or: [
+  ['bikeInGoodCondition', 'weatherIsGood'],
+  ['busPass', { or: [['exactChange'], ['busTakesCreditCard']] }],
+  ['car', 'parkingPass']
+] }, async (completedDependencyGroup) => {
+  // will run when ANY group is complete.
+  // completedDependencyGroup is an array of the dependencies that were completed.
 })
 ```
 
@@ -102,10 +100,10 @@ Multiple predicates are evaluated with AND logic - all must be satisfied. Each p
 
 ```typescript
 graph.registerEvent('criticalTask', ['dependency'], handler, {
-  maxRetries: 3,           // Retry failed events
-  retryDelay: 1000,        // Wait between retries (ms)
-  timeout: 5000,           // Maximum execution time (ms)
-  fireOnComplete: false    // Manual completion mode
+  maxRetries: 3,
+  retryDelay: 1000, // ms
+  timeout: 5000, // ms
+  fireOnComplete: false
 })
 ```
 
@@ -126,18 +124,82 @@ Then open `http://localhost:3000` to see your graph visualization.
 By default, events automatically complete when their handler finishes. You can override this with `fireOnComplete: false` to manually control when events complete:
 
 ```typescript
-// Registration
+// registration
 graph.registerEvent('validateOrder', ['cart'], 
   async ({ cart }) => {
-    // This won't automatically complete the event
+    // this won't automatically complete the event
     await validateItems(cart)
   }, 
   { fireOnComplete: false }
 )
 
-// Later, manually complete the event
+// later, manually complete the event
 await graph.completeEvent('validateOrder', { isValid: true })
 ```
+
+### Fault Tolerance & State Recovery
+
+While Steffi doesn't directly handle fault tolerance, you can persist state changes to an external database using the emitted events.
+
+```typescript
+// Save all status changes to database
+graph.on('eventStarted', (eventName) => {
+  await db.saveEventState(eventName, {
+    status: 'IN_PROGRESS',
+    timestamp: new Date()
+  })
+})
+
+graph.on('eventCompleted', (eventName, value, timestamp) => {
+  await db.saveEventState(eventName, {
+    status: 'COMPLETED',
+    value,
+    timestamp
+  })
+})
+
+graph.on('eventFailed', (eventName, error, timestamp) => {
+  await db.saveEventState(eventName, {
+    status: 'FAILED',
+    error,
+    timestamp
+  })
+})
+
+// when restarting, query database for last known state
+const dbState = await db.getGraphState()
+const savedState = {
+  completed: {},
+  failed: {}
+}
+
+// only restore COMPLETED and FAILED events
+for (const [eventName, state] of Object.entries(dbState)) {
+  if (state.status === 'COMPLETED') {
+    savedState.completed[eventName] = {
+      value: state.value,
+      at: state.timestamp
+    }
+  } else if (state.status === 'FAILED') {
+    savedState.failed[eventName] = {
+      error: state.error,
+      at: state.timestamp
+    }
+  }
+}
+
+// handle cleanup of any events that were IN_PROGRESS
+const inProgressEvents = Object.entries(dbState)
+  .filter(([_, state]) => state.status === 'IN_PROGRESS')
+  .map(([eventName]) => eventName)
+
+await cleanupInterruptedEvents(inProgressEvents)
+
+// reactivate graph with saved state
+graph.activate(savedState)
+```
+
+Events that were IN_PROGRESS during shutdown will automatically be rerun when the graph is reactivated. Before reactivating the graph, you should implement cleanup logic for any side effects that may have been created by interrupted events. IN_PROGRESS events are intentionally not restored from the saved state, as they need to be re-executed to ensure completion.
 
 ## API Reference
 
@@ -145,9 +207,11 @@ await graph.completeEvent('validateOrder', { isValid: true })
 
 - `registerEvent(type, dependencies, handler, options?)`
 - `completeEvent(type, value?)`
-- `resetEvent(type)` // this will reset the event and all its dependents, and refire the event
-- `activate()`
+- `activate(initialState?)`
 - `getEventStatus(type)`
+- `async waitForEvent(type)`
+- `resetEvent(type, beforeReset?)`
+    - this will reset the event and all its dependents, and refire the event. beforeReset is a function that takes in all events that will be reset; any side effects should be cleaned up here.
 
 ### GraphRegistry
 
@@ -158,7 +222,3 @@ await graph.completeEvent('validateOrder', { isValid: true })
 ## Example
 
 For a complete example, see the potion brewing simulation in the example directory.
-
-## License
-
-MIT

@@ -24,10 +24,7 @@ export type EventOptions<T extends BaseEventPayloads> = DependencyGraphOptions &
   predicates?: DependencyPredicate<T>[]
 }
 
-export interface EventError {
-  message: string;
-  timestamp: number;
-}
+export type EventError = string;
 
 export interface GraphState {
   dependencies: Record<string, string[]>;
@@ -36,14 +33,15 @@ export interface GraphState {
   completedTimestamps: Record<string, number>;
   status: Record<string, EventStatus>;
   errors: Record<string, EventError>;
+  failedTimestamps: Record<string, number>;
 }
 
 export type GraphEvent = 
   | { type: 'GRAPH_REGISTERED'; payload: { name: string; initialState: GraphState } }
   | { type: 'EVENT_REGISTERED'; payload: { graphName: string; eventName: string; dependencies: string[] } }
   | { type: 'EVENT_STARTED'; payload: { graphName: string; eventName: string } }
-  | { type: 'EVENT_COMPLETED'; payload: { graphName: string; eventName: string; value: any } }
-  | { type: 'EVENT_FAILED'; payload: { graphName: string; eventName: string; error: EventError } }
+  | { type: 'EVENT_COMPLETED'; payload: { graphName: string; eventName: string; value: any; at: Date } }
+  | { type: 'EVENT_FAILED'; payload: { graphName: string; eventName: string; error: EventError, at: Date } }
 
 export type OrGroup<T extends BaseEventPayloads> = {
   or?: RecursiveDependency<T>[][]

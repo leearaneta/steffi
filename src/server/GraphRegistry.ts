@@ -45,17 +45,17 @@ export class GraphRegistry {
       })
     })
 
-    graph.on('eventCompleted', (eventName: string, value: any) => {
+    graph.on('eventCompleted', (eventName: string, value: any, at: Date) => {
       this.broadcast({
         type: 'EVENT_COMPLETED',
-        payload: { graphName: name, eventName, value }
+        payload: { graphName: name, eventName, value, at }
       })
     })
 
-    graph.on('eventFailed', (eventName: string, error: EventError) => {
+    graph.on('eventFailed', (eventName: string, error: EventError, at: Date) => {
       this.broadcast({
         type: 'EVENT_FAILED',
-        payload: { graphName: name, eventName, error }
+        payload: { graphName: name, eventName, error, at }
       })
     })
   }

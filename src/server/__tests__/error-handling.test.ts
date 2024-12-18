@@ -1,5 +1,5 @@
 import { DependencyGraph } from '../DependencyGraph'
-import { EventStatus } from '../../types'
+import { EventStatus, EventError } from '../../types'
 
 describe('DependencyGraph - Error Handling', () => {
   it('retries failed events up to maxRetries', async () => {
@@ -68,7 +68,7 @@ describe('DependencyGraph - Error Handling', () => {
     try {
       await graph.waitForEvent('event1')
     } catch (e) {
-      expect(e.message).toContain('timed out')
+      expect(e).toContain('timed out')
     }
 
     expect(graph.getEventStatus('event1')).toBe(EventStatus.FAILED)
