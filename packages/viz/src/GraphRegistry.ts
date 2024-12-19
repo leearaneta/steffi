@@ -1,9 +1,9 @@
-import { DependencyGraph } from './DependencyGraph'
+import { DependencyGraph } from 'steffi'
 import { createServer, Server } from 'http'
 import path from 'path'
 import fs from 'fs'
 import http from 'http'
-import { EventError, GraphEvent } from '../types'
+import { EventError, GraphEvent } from '@types'
 
 export class GraphRegistry {
   private static instance: GraphRegistry
@@ -71,7 +71,7 @@ export class GraphRegistry {
     }
 
     this.server = createServer((req, res) => {
-      const distPath = path.join(__dirname, '../client/dist')
+      const distPath = path.join(__dirname, 'client')
 
       if (req.method === 'OPTIONS') {
         res.writeHead(204)

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import { BaseEventPayloads, DependencyGraphOptions, EventStatus, EventError } from '../types'
+import { BaseEventPayloads, DependencyGraphOptions, EventStatus, EventError } from '@types'
 
 export class EventManager<TEventPayloads extends BaseEventPayloads> {
   private runnables = {} as Record<
@@ -28,7 +28,7 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
 
   registerEvent(
     type: keyof TEventPayloads,
-    runnable: (args: Pick<TEventPayloads, keyof TEventPayloads>) => Promise<void>,
+    runnable: (args: Pick<TEventPayloads, Extract<keyof TEventPayloads, string>>) => Promise<void>,
     options: DependencyGraphOptions = {}
   ) {
     const mergedOptions = {

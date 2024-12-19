@@ -11,7 +11,7 @@ import {
   OrGroup,
   EventOptions,
   EventError,
-} from '../types'
+} from '@types'
 
 export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends EventEmitter {
   private dependencies = {} as Record<keyof TEventPayloads, DependencyGroup<TEventPayloads>[]>
@@ -44,21 +44,21 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
   }
 
   // these overloads keep the runnable typesafe depending on fireOnComplete
-  registerEvent<TDeps extends keyof TEventPayloads>(
+  registerEvent<TDeps extends Extract<keyof TEventPayloads, string>>(
     type: keyof TEventPayloads,
     dependencies: Dependencies<TEventPayloads>,
     runnable: (args: Pick<TEventPayloads, TDeps>) => Promise<TEventPayloads[typeof type]>,
     options?: EventOptions<TEventPayloads> & { fireOnComplete?: true }
   ): void;
 
-  registerEvent<TDeps extends keyof TEventPayloads>(
+  registerEvent<TDeps extends Extract<keyof TEventPayloads, string>>(
     type: keyof TEventPayloads,
     dependencies: Dependencies<TEventPayloads>,
     runnable: (args: Pick<TEventPayloads, TDeps>) => Promise<void>,
     options: EventOptions<TEventPayloads> & { fireOnComplete: false }
   ): void;
 
-  registerEvent<TDeps extends keyof TEventPayloads>(
+  registerEvent<TDeps extends Extract<keyof TEventPayloads, string>>(
     type: keyof TEventPayloads,
     dependencies: Dependencies<TEventPayloads>,
     runnable: (args: Pick<TEventPayloads, TDeps>) => Promise<TEventPayloads[typeof type]>,
@@ -108,7 +108,7 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     if (!this.isActive) {
       throw new Error('Cannot complete events before graph has been activated')
     }
-    await this.eventManager.completeEvent(type, value, new Date())
+    await this.eventManager.completeEvent(type, value!, new Date())
     this.emit('eventCompleted', type, value)
     const dependents = this.dependents[type] || new Set()
     for (const dependent of dependents) {
@@ -216,11 +216,11 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     
     if (initialState) {
       Object.keys(initialState.completed).forEach(type => {
-        const { at, value } = initialState.completed[type]
+        const { at, value } = initialState.completed[type]!
         this.eventManager.completeEvent(type, value, at)
       })
       Object.keys(initialState.failed).forEach(type => {
-        const { at, error } = initialState.failed[type]
+        const { at, error } = initialState.failed[type]!
         this.eventManager.failEvent(type, error, at)
       })
     }
@@ -294,11 +294,11 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     }
     
     const decomposedOrGroups = orGroups
-      .map(group => group.or.flatMap(or => this.decomposeDependencies(or)))
+      .map(group => group.or?.flatMap(or => this.decomposeDependencies(or)) || [])
 
-    let results = decomposedOrGroups.shift()
+    let results = decomposedOrGroups.shift()!
     while (decomposedOrGroups.length > 0) {
-      const group = decomposedOrGroups.shift()
+      const group = decomposedOrGroups.shift()!
       results = results.map(result => group.flatMap(g => [...result, ...g]))
     }
     return results.map(result => [...result, ...requiredDeps])
