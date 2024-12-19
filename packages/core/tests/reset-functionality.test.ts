@@ -1,4 +1,4 @@
-import { DependencyGraph } from '../DependencyGraph'
+import { DependencyGraph } from '../src/DependencyGraph'
 
 describe('DependencyGraph - Reset Functionality', () => {
   it('resets an event and its dependents by name', async () => {

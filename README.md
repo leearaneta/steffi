@@ -109,6 +109,12 @@ graph.registerEvent('criticalTask', ['dependency'], handler, {
 
 ### Visualization
 
+Visualization requires the `@steffi/viz` package.
+
+```bash
+npm install @steffi/viz
+```
+
 ```typescript
 import { GraphRegistry } from 'steffi'
 
@@ -213,7 +219,7 @@ Events that were IN_PROGRESS during shutdown will automatically be rerun when th
 - `resetEvent(type, beforeReset?)`
     - this will reset the event and all its dependents, and refire the event. beforeReset is a function that takes in all events that will be reset; any side effects should be cleaned up here.
 
-### GraphRegistry
+### GraphRegistry (@steffi/viz)
 
 - `getInstance()`
 - `registerGraph(name, graph)`
@@ -222,3 +228,10 @@ Events that were IN_PROGRESS during shutdown will automatically be rerun when th
 ## Example
 
 For a complete example, see the potion brewing simulation in the example directory.
+
+## Development (requires pnpm)
+
+```bash
+pnpm install
+pnpm run dev
+```

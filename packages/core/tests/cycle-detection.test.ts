@@ -1,4 +1,4 @@
-import { DependencyGraph } from '../DependencyGraph'
+import { DependencyGraph } from '../src/DependencyGraph'
 
 describe('DependencyGraph - Cycle Detection', () => {
   it('detects direct cycles', () => {

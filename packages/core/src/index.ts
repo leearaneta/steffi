@@ -7,9 +7,9 @@ export type {
   BaseEventPayloads,
   DependencyGraphOptions,
   EventOptions
-} from '@types'
+} from '@steffi/types'
 
-// Optional visualization export
+// optional visualization export
 let GraphRegistry: any
 try {
   GraphRegistry = require('@steffi/viz').GraphRegistry

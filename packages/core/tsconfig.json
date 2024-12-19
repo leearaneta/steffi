@@ -2,12 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "../../",
-    "lib": ["ES2020"],
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "rootDir": ".",
+    "lib": ["ES2020"]
   },
-  "include": ["src"]
+  "references": [
+    { "path": "../../packages/types" }
+  ],
+  "include": ["src", "tests"],
 }

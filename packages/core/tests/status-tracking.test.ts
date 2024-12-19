@@ -1,5 +1,4 @@
-import { DependencyGraph } from '../DependencyGraph'
-import { EventStatus } from '../../types'
+import { DependencyGraph } from '../src/DependencyGraph'
 
 describe('DependencyGraph - Status Tracking', () => {
   it('tracks event status correctly through its lifecycle', async () => {
@@ -10,13 +9,14 @@ describe('DependencyGraph - Status Tracking', () => {
     
     graph.registerEvent('event1', [], async () => {
       await new Promise(resolve => setTimeout(resolve, 10))
+      return { value: 1 }
     })
 
-    expect(graph.getEventStatus('event1')).toBe(EventStatus.PENDING)
+    expect(graph.getEventStatus('event1')).toBe('PENDING')
     graph.activate()
-    expect(graph.getEventStatus('event1')).toBe(EventStatus.IN_PROGRESS)
+    expect(graph.getEventStatus('event1')).toBe('IN_PROGRESS')
     await new Promise(resolve => setTimeout(resolve, 20))
-    expect(graph.getEventStatus('event1')).toBe(EventStatus.COMPLETED)
+    expect(graph.getEventStatus('event1')).toBe('COMPLETED')
   })
 
   it('marks event as FAILED when it throws', async () => {
@@ -36,6 +36,6 @@ describe('DependencyGraph - Status Tracking', () => {
       // expected to throw
     }
 
-    expect(graph.getEventStatus('event1')).toBe(EventStatus.FAILED)
+    expect(graph.getEventStatus('event1')).toBe('FAILED')
   })
 }) 

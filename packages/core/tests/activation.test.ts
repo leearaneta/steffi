@@ -1,5 +1,4 @@
-import { EventStatus } from "../../types"
-import { DependencyGraph } from "../DependencyGraph"
+import { DependencyGraph } from "../src/DependencyGraph"
 
 describe('DependencyGraph - Activation', () => {
 
@@ -65,6 +64,6 @@ describe('DependencyGraph - Activation', () => {
     
     expect(handler1).not.toHaveBeenCalled() // should not run since loaded from state
     expect(handler2).toHaveBeenCalledWith({ event1: { value: 42 } })
-    expect(graph.getEventStatus('event1')).toBe(EventStatus.COMPLETED)
+    expect(graph.getEventStatus('event1')).toBe('COMPLETED')
   })
 }) 

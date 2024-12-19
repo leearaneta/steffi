@@ -1,4 +1,4 @@
-import { DependencyGraph } from '../DependencyGraph'
+import { DependencyGraph } from '../src/DependencyGraph'
 
 it('handles shared dependencies between OR groups', async () => {
     const graph = new DependencyGraph<{

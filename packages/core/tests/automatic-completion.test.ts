@@ -1,5 +1,4 @@
-import { DependencyGraph } from '../DependencyGraph'
-import { EventStatus } from '../../types'
+import { DependencyGraph } from '../src/DependencyGraph'
 
 describe('DependencyGraph - Automatic Completion', () => {
   it('automatically completes event when runnable finishes by default', async () => {
@@ -15,7 +14,7 @@ describe('DependencyGraph - Automatic Completion', () => {
     await graph.completeEvent('dep1', 'hello')
     await new Promise(resolve => setImmediate(resolve))
 
-    expect(graph.getEventStatus('target')).toBe(EventStatus.COMPLETED)
+    expect(graph.getEventStatus('target')).toBe('COMPLETED')
   })
 
   it('does not automatically complete event when fireOnComplete is false', async () => {
@@ -37,9 +36,9 @@ describe('DependencyGraph - Automatic Completion', () => {
 
     await new Promise(resolve => setImmediate(resolve))
 
-    expect(graph.getEventStatus('target')).toBe(EventStatus.IN_PROGRESS)
+    expect(graph.getEventStatus('target')).toBe('IN_PROGRESS')
 
     await graph.completeEvent('target', true)
-    expect(graph.getEventStatus('target')).toBe(EventStatus.COMPLETED)
+    expect(graph.getEventStatus('target')).toBe('COMPLETED')
   })
 })

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { GraphState, GraphEvent, EventStatus } from '../types'
+import { GraphState, GraphEvent } from '@steffi/types'
 
 interface Store {
   graphs: Record<string, GraphState>
@@ -29,7 +29,7 @@ export const useStore = create<Store>((set) => ({
       }
       
       case 'EVENT_REGISTERED': {
-        const { graphName, eventName, dependencies } = event.payload
+        const { graphName, eventName, dependencies, predicates } = event.payload
         const graph = state.graphs[graphName]
         if (!graph) return state
 
@@ -42,6 +42,10 @@ export const useStore = create<Store>((set) => ({
               dependencies: {
                 ...graph.dependencies,
                 [eventName]: dependencies
+              },
+              predicates: {
+                ...graph.predicates,
+                [eventName]: predicates
               }
             }
           }
@@ -49,7 +53,7 @@ export const useStore = create<Store>((set) => ({
       }
       
       case 'EVENT_STARTED': {
-        const { graphName, eventName } = event.payload
+        const { graphName, eventName, predicates } = event.payload
         const graph = state.graphs[graphName]
         if (!graph) return state
 
@@ -61,7 +65,14 @@ export const useStore = create<Store>((set) => ({
               ...graph,
               status: {
                 ...graph.status,
-                [eventName]: EventStatus.IN_PROGRESS
+                [eventName]: 'IN_PROGRESS'
+              },
+              predicates: {
+                ...graph.predicates,
+                [eventName]: graph.predicates[eventName].map(predicate => ({
+                  ...predicate,
+                  passed: predicates.includes(predicate.name)
+                }))
               }
             }
           }
@@ -81,7 +92,7 @@ export const useStore = create<Store>((set) => ({
               ...graph,
               status: {
                 ...graph.status,
-                [eventName]: EventStatus.COMPLETED
+                [eventName]: 'COMPLETED'
               },
               completedEvents: {
                 ...graph.completedEvents,
@@ -109,7 +120,7 @@ export const useStore = create<Store>((set) => ({
               ...graph,
               status: {
                 ...graph.status,
-                [eventName]: EventStatus.FAILED
+                [eventName]: 'FAILED'
               },
               errors: {
                 ...graph.errors,
@@ -128,7 +139,6 @@ export const useStore = create<Store>((set) => ({
         return state
     }
   }),
-  
   selectGraph: (name) => set({ selectedGraph: name }),
   selectNode: (name) => set({ selectedNode: name }),
   setHoveredNode: (name) => set({ hoveredNode: name })

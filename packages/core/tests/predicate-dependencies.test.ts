@@ -1,4 +1,4 @@
-import { DependencyGraph } from '../DependencyGraph'
+import { DependencyGraph } from '../src/DependencyGraph'
 
 // describe('DependencyGraph - Predicate Dependencies', () => {
 //   it('executes event only when predicate is satisfied', async () => {
@@ -133,7 +133,8 @@ it('executes event when OR condition is met, but predicate only affects specific
     predicates: [
       {
         required: ['b'],
-        fn: ({ b }) => b > 5
+        fn: ({ b }) => b > 5,
+        name: 'b > 5'
       }
     ]
   })

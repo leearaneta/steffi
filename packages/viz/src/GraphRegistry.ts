@@ -3,7 +3,7 @@ import { createServer, Server } from 'http'
 import path from 'path'
 import fs from 'fs'
 import http from 'http'
-import { EventError, GraphEvent } from '@types'
+import type { BaseEventPayloads, EventError, GraphEvent, DependencyPredicate } from '@steffi/types'
 
 export class GraphRegistry {
   private static instance: GraphRegistry
@@ -20,7 +20,7 @@ export class GraphRegistry {
     return GraphRegistry.instance
   }
 
-  registerGraph(name: string, graph: DependencyGraph<any>) {
+  registerGraph<T extends BaseEventPayloads>(name: string, graph: DependencyGraph<T>) {
     this.graphs.set(name, graph)
     
     this.broadcast({
@@ -31,17 +31,17 @@ export class GraphRegistry {
       }
     })
 
-    graph.on('eventRegistered', (eventName: string, dependencies: string[]) => {
+    graph.on('eventRegistered', (eventName: string, dependencies: string[][], predicates: DependencyPredicate<any>[]) => {
       this.broadcast({
         type: 'EVENT_REGISTERED',
-        payload: { graphName: name, eventName, dependencies }
+        payload: { graphName: name, eventName, dependencies, predicates }
       })
     })
 
-    graph.on('eventStarted', (eventName: string) => {
+    graph.on('eventStarted', (eventName: string, predicates: string[]) => {
       this.broadcast({
         type: 'EVENT_STARTED',
-        payload: { graphName: name, eventName }
+        payload: { graphName: name, eventName, predicates }
       })
     })
 
@@ -64,14 +64,18 @@ export class GraphRegistry {
     return this.graphs.get(name)
   }
 
-  startVisualizationServer(port: number): Server {
+  startVisualizationServer(port: number, options: { dev?: boolean } = {}): Server {
     if (this.server) {
       console.warn('Visualization server is already running')
       return this.server
     }
 
     this.server = createServer((req, res) => {
-      const distPath = path.join(__dirname, 'client')
+      if (options.dev) {
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+      }
 
       if (req.method === 'OPTIONS') {
         res.writeHead(204)
@@ -84,6 +88,7 @@ export class GraphRegistry {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
+          ...(options.dev && { 'Access-Control-Allow-Origin': '*' })
         })
 
         this.clients.add(res)
@@ -107,10 +112,16 @@ export class GraphRegistry {
       }
 
       // static file serving
-      let filePath = path.join(distPath, req.url === '/' ? 'index.html' : req.url!)
+      let filePath = path.join(__dirname, 'client')
       
+      if (req.url === '/') {
+        filePath = path.join(filePath, 'index.html')
+      } else {
+        filePath = path.join(filePath, req.url!)
+      }
+
       if (!fs.existsSync(filePath)) {
-        filePath = path.join(distPath, 'index.html')
+        filePath = path.join(filePath, 'index.html')
       }
 
       const extname = path.extname(filePath)

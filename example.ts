@@ -1,4 +1,5 @@
-import { DependencyGraph, GraphRegistry } from '../src'
+import { DependencyGraph } from './packages/core/dist'
+import { GraphRegistry } from './packages/viz/src/GraphRegistry'
 
 interface PotionBrewing {
   heatSolution: {
@@ -33,78 +34,91 @@ interface PotionBrewing {
 const graph = new DependencyGraph<PotionBrewing>({ maxRetries: 0 })
 
 graph.registerEvent('heatSolution', [], async () => {
-  console.log('Heating solution to reaction temperature...')
+  const timeSeconds = Math.floor(Math.random() * (450 - 150 + 1)) + 150
+  console.log(`Heating solution to reaction temperature (${timeSeconds} seconds)...`)
   await new Promise(resolve => setTimeout(resolve, 1000))
   return {
     temperatureC: 82.5,
-    timeSeconds: 300
+    timeSeconds
   }
 })
 
-graph.registerEvent('addBase', ['heatSolution'], async (args) => {
-  console.log(`Solution at ${args.heatSolution.temperatureC}°C, adding base compound...`)
-  await new Promise(resolve => setTimeout(resolve, 1500))
-  return {
-    pH: 8.2,
-    volume: 500,
-    concentration: 0.1
-  }
-})
 
-graph.registerEvent('dissolveReagent', ['addBase'], async ({ addBase }) => {
-  console.log(`pH stabilized at ${addBase.pH}, introducing primary reagent...`)
+graph.registerEvent(
+  'dissolveReagent',
+  ['heatSolution'],
+  async () => {
+    console.log('Dissolving primary reagent...')
+    await new Promise(resolve => setTimeout(resolve, 1200))
+    return {
+      solubilityMgL: 145.2,
+      dissolutionRate: 0.85
+    }
+  },
+  { predicates: [{
+    name: 'heating longer than 300s',
+    fn: ({ heatSolution }) => heatSolution.timeSeconds > 300
+  }] }
+)
+
+graph.registerEvent(
+  'addBase',
+  ['heatSolution'],
+  async () => {
+    console.log(`Adding base compound...`)
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    return {
+      pH: 8.2,
+      volume: 500,
+      concentration: 0.1
+    }
+  },
+  { predicates: [{
+    name: 'heating less than 300s',
+    fn: ({ heatSolution }) => heatSolution.timeSeconds <= 300
+  }] }
+)
+
+graph.registerEvent('catalyze', [
+  { or: [
+    ['addBase'],
+    ['dissolveReagent']
+  ]}
+], async () => {
+  console.log('Adding catalyst to accelerate reaction...')
   await new Promise(resolve => setTimeout(resolve, 800))
   return {
-    solubilityMgL: 145.2,
-    dissolutionRate: 0.23
-  }
-})
-
-graph.registerEvent('catalyze', ['dissolveReagent'], async ({ dissolveReagent }) => {
-  console.log(`Reagent dissolved at ${dissolveReagent.solubilityMgL}mg/L, beginning catalysis...`)
-  await new Promise(resolve => setTimeout(resolve, 1200))
-  return {
-    reactionRate: 0.42,
+    reactionRate: 1.23,
     yield: 0.89
   }
 })
 
-graph.registerEvent('stabilize', ['catalyze'], async ({ catalyze }) => {
-  console.log(`Reaction yielded ${catalyze.yield * 100}%, stabilizing solution...`)
+graph.registerEvent('stabilize', ['catalyze'], async () => {
+  console.log('Stabilizing the reaction mixture...')
   await new Promise(resolve => setTimeout(resolve, 1000))
   return {
-    halfLife: 2160,
+    halfLife: 48.5,
     stability: 0.95
   }
 })
 
-graph.registerEvent('analyze', 
-  ['addBase', 'dissolveReagent', 'catalyze', 'stabilize'], 
-  async ({ addBase, dissolveReagent, catalyze, stabilize }) => {
-    console.log('\nFinal Analysis:')
-    console.log('------------------------')
-    console.log(`Base pH: ${addBase.pH}`)
-    console.log(`Reagent Solubility: ${dissolveReagent.solubilityMgL}mg/L`)
-    console.log(`Reaction Yield: ${(catalyze.yield * 100).toFixed(1)}%`)
-    console.log(`Stability Score: ${(stabilize.stability * 100).toFixed(1)}%`)
-    console.log('------------------------')
-
-    return {
-      composition: {
-        'active-compound': 0.82,
-        'stabilizer': 0.15,
-        'carrier': 0.03
-      },
-      purity: 0.982,
-      yield: catalyze.yield,
-      shelfLife: stabilize.halfLife * stabilize.stability
-    }
+graph.registerEvent('analyze', ['stabilize'], async () => {
+  console.log('Analyzing final product...')
+  await new Promise(resolve => setTimeout(resolve, 500))
+  return {
+    composition: {
+      'active-compound': 0.82,
+      'stabilizer': 0.15,
+      'impurities': 0.03
+    },
+    purity: 0.97,
+    yield: 0.85,
+    shelfLife: 180
+  }
 })
 
 const registry = GraphRegistry.getInstance()
-registry.registerGraph('synthesis', graph)
-registry.startVisualizationServer(3000)
-graph.activate()
+registry.registerGraph('potion-brewing', graph)
+registry.startVisualizationServer(3000, { dev: true })
 
-console.log('Visualization server started at http://localhost:3000')
-console.log('Beginning synthesis process...\n')
+graph.activate()

@@ -2,14 +2,16 @@
   "name": "steffi",
   "private": true,
   "scripts": {
+    "dev": "concurrently \"tsx watch example.ts\" \"tsc -b packages/types packages/core packages/viz --watch\" \"pnpm --filter viz dev\"",
+    "build:types": "pnpm --filter @steffi/types build",
     "build:core": "pnpm --filter steffi build",
-    "build:viz": "pnpm --filter viz build",
-    "build": "pnpm build:core",
-    "test": "pnpm --filter core test",
-    "example": "ts-node example.ts"
+    "build:viz": "pnpm --filter @steffi/viz build",
+    "build": "pnpm build:types && pnpm build:core && pnpm build:viz",
+    "test": "pnpm --filter steffi test"
   },
   "devDependencies": {
-    "ts-node": "^10.9.1",
+    "concurrently": "^8.0.0",
+    "tsx": "^4.0.0",
     "typescript": "^5.0.4"
   }
 }
