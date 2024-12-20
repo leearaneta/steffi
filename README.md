@@ -2,15 +2,6 @@
 
 A TypeScript library for building and visualizing type-safe, event-driven, directed graphs. (named after [Steffi Graf](https://en.wikipedia.org/wiki/Steffi_Graf))
 
-## Features
-
-- 🎯 Type-safe event registration and execution
-- 🔄 Complex dependency management with AND/OR conditions
-- 🎨 Built-in visualization server
-- 🔍 Real-time event monitoring
-- ⚡ Automatic retry and timeout handling
-- 🛡️ Cycle detection
-- 🔄 Event reset capabilities
 
 ## Installation
 
@@ -80,7 +71,7 @@ graph.registerEvent('submitOrder', ['cart', 'userInfo'], handler, {
     {
       required: ['cart'],
       fn: ({ cart }) => cart.items.length > 0,
-      name: 'cartNotEmpty'  // optional name for debugging
+      name: 'cartNotEmpty'  // required name for debugging
     },
     {
       required: ['cart', 'userInfo'],
@@ -109,10 +100,10 @@ graph.registerEvent('criticalTask', ['dependency'], handler, {
 
 ### Visualization
 
-Visualization requires the `@steffi/viz` package.
+Visualization requires the `steffi-viz` package.
 
 ```bash
-npm install @steffi/viz
+npm install steffi-viz
 ```
 
 ```typescript
@@ -219,7 +210,7 @@ Events that were IN_PROGRESS during shutdown will automatically be rerun when th
 - `resetEvent(type, beforeReset?)`
     - this will reset the event and all its dependents, and refire the event. beforeReset is a function that takes in all events that will be reset; any side effects should be cleaned up here.
 
-### GraphRegistry (@steffi/viz)
+### GraphRegistry (steffi-viz)
 
 - `getInstance()`
 - `registerGraph(name, graph)`

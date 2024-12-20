@@ -12,11 +12,11 @@ export type {
 // optional visualization export
 let GraphRegistry: any
 try {
-  GraphRegistry = require('@steffi/viz').GraphRegistry
+  GraphRegistry = require('steffi-viz').GraphRegistry
 } catch {
   GraphRegistry = class {
     static getInstance() {
-      throw new Error('Visualization functionality requires @steffi/viz package. Install it with: npm install @steffi/viz')
+      throw new Error('Visualization functionality requires steffi-viz package. Install it with: npm install steffi-viz')
     }
   }
 }
