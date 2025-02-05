@@ -5,11 +5,11 @@ module.exports = {
   roots: ['<rootDir>/src', '<rootDir>/tests'],
   testMatch: ['**/*.test.ts'],
   moduleFileExtensions: ['ts', 'js'],
-  globals: {
-    'ts-jest': {
+  transform: {
+    '^.+\\.ts$': ['ts-jest', {
       tsconfig: {
         types: ['jest', 'node'],
       }
-    }
+    }]
   }
 }

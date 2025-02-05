@@ -9,7 +9,6 @@ import type {
   EventStatus,
   DependencyPredicate,
   OrGroup,
-  EventError,
   EventOptions,
 } from '@steffi/types'
 
@@ -20,29 +19,52 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
   private predicates = {} as Record<keyof TEventPayloads, DependencyPredicate<TEventPayloads>[]>
   private defaultOptions: DependencyGraphOptions = {}
   private frozenEvents = new Set<keyof TEventPayloads>()
+  private allowCycles: boolean
   isActive = false
 
   constructor(options: DependencyGraphOptions = {}) {
     super()
     this.eventManager = new EventManager(this, options)
     this.defaultOptions = options
+    this.allowCycles = options.allowCycles ?? false
+    if (options.initialState) {
+      Object.entries(options.initialState.completed).forEach(([type, values]) => {
+        if (Array.isArray(values)) {
+          values.forEach(({ at, value }) => {
+            this.eventManager.completeEvent(type, value, at)
+          })
+        } else {
+          const { at, value } = values!
+          this.eventManager.completeEvent(type, value, at)
+        }
+      })
+      Object.entries(options.initialState.failed).forEach(([type, values]) => {
+        if (Array.isArray(values)) {
+          values.forEach(({ at, error }) => {
+            this.eventManager.failEvent(type, error, at)
+          })
+        } else {
+          const { at, error } = values!
+          this.eventManager.failEvent(type, error, at)
+        }
+      })
+    }
   }
 
   private async tryRunEvent(type: keyof TEventPayloads) {
     if (this.frozenEvents.has(type)) {
       console.log('Cannot run event ', type, ' because its dependencies are being reset.')
       return
-    } else if (this.eventManager.getStatus(type) !== 'PENDING') {
+    } else if (
+      (!this.allowCycles && this.eventManager.getStatus(type) !== 'PENDING')
+      || (this.allowCycles && this.eventManager.getStatus(type) === 'IN_PROGRESS')
+    ) {
       console.log('Cannot run event ', type, ' because is in progress or has already completed.')
       return
     }
     const dependencies = this.dependencies[type] || []
     const passed = this.checkDependenciesAndGetValues(type, dependencies)
     if (passed) {
-      passed.predicates.forEach(predicateName => {
-        const predicate = this.predicates[type]?.find(p => p.name === predicateName)!
-        predicate.passed = true
-      })
       await this.eventManager.executeEvent(type, passed.values, passed.predicates)
     }
   }
@@ -54,8 +76,8 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     type: TDeps,
     dependencies: Dependencies<TEventPayloads>,
     runnable: TOptions extends { fireOnComplete: false }
-      ? (args: Pick<TEventPayloads, TDeps>) => Promise<void>
-      : (args: Pick<TEventPayloads, TDeps>) => Promise<TEventPayloads[TDeps]>,
+      ? (args: Partial<TEventPayloads>) => Promise<void>
+      : (args: Partial<TEventPayloads>) => Promise<TEventPayloads[TDeps]>,
     options?: TOptions
   ): void {
     if (this.isActive) {
@@ -65,22 +87,24 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     if (this.dependencies[type]) {
       console.warn(`event ${String(type)} is already registered, overwriting dependencies`)
     }
-
-    this.predicates[type] = options?.predicates?.map(predicate => ({ ...predicate, passed: false })) || []
+    
+    this.predicates[type] = options?.predicates || []
 
     const decomposed = this.decomposeDependencies(dependencies)
     this.dependencies[type] = decomposed
 
-    decomposed.forEach(group => {
-      if (this.wouldCreateCycle(group, type)) {
-        throw new Error(`Adding dependencies ${group.join(', ')} to ${String(type)} would create a cycle`)
-      }
-    })
+    if (!this.allowCycles) {
+      decomposed.forEach(group => {
+        if (this.wouldCreateCycle(group, type)) {
+          throw new Error(`Adding dependencies ${group.join(', ')} to ${String(type)} would create a cycle`)
+        }
+      })
+    }
 
     const eventOptions = { ...this.defaultOptions, ...options }
     eventOptions.fireOnComplete = eventOptions.fireOnComplete ?? true
     const wrappedRunnable = eventOptions.fireOnComplete
-      ? async (args: Pick<TEventPayloads, TDeps>): Promise<void> => {
+      ? async (args: Partial<TEventPayloads>): Promise<void> => {
           const value = await runnable(args)
           await this.completeEvent(type, value!)
         }
@@ -102,8 +126,9 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     if (!this.isActive) {
       throw new Error('Cannot complete events before graph has been activated')
     }
-    await this.eventManager.completeEvent(type, value!, new Date())
-    this.emit('eventCompleted', type, value)
+    const now = new Date()
+    await this.eventManager.completeEvent(type, value!, now)
+    this.emit('eventCompleted', type, value, now)
     const dependents = this.dependents[type] || new Set()
     for (const dependent of dependents) {
       void this.tryRunEvent(dependent)
@@ -114,8 +139,16 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     this.frozenEvents.add(type)
   }
 
+  freeze() {
+    Object.keys(this.dependencies).forEach(type => this.freezeEvent(type))
+  }
+
   unfreezeEvent(type: keyof TEventPayloads) {
     this.frozenEvents.delete(type)
+  }
+
+  unfreeze() {
+    Object.keys(this.dependencies).forEach(type => this.unfreezeEvent(type))
   }
 
   async resetEvent(
@@ -134,9 +167,11 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
       // ignore errors
     }
     dependents.forEach(event => this.unfreezeEvent(event))
-    const eventsToReset = [type, ...dependents].filter(event =>
-      this.eventManager.getStatus(event) !== 'PENDING'
-    )
+    const eventsToReset = this.allowCycles
+      ? [type]
+      : [type, ...dependents].filter(event =>
+          this.eventManager.getStatus(event) !== 'PENDING'
+        )
 
     if (beforeReset) {
       await beforeReset(eventsToReset)
@@ -149,15 +184,10 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     void this.tryRunEvent(type)
   }
 
-  async resetEventsAfterTime(time: Date) {
-    const resetEvents = this.eventManager.resetEventsAfterTime(time)
-    for (const event of resetEvents) {
-      void this.tryRunEvent(event)
-    }
-  }
 
   getGraph(): GraphState {
     return {
+      allowCycles: this.allowCycles,
       dependencies: this.dependencies,
       dependents: Object.fromEntries(
         Object.entries(this.dependents).map(([k, v]) => [
@@ -165,11 +195,10 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
           Array.from(v).map(String)
         ])
       ),
+      initiatedEvents: this.eventManager.initiatedEvents,
       completedEvents: this.eventManager.completedEvents,
-      completedTimestamps: this.eventManager.completedTimestamps,
-      failedTimestamps: this.eventManager.failedTimestamps,
+      failedEvents: this.eventManager.failedEvents,
       status: this.eventManager.eventStatus,
-      errors: this.eventManager.errors,
       predicates: this.predicates,
     }
   }
@@ -180,14 +209,18 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
   
     const collectDependents = (
       eventType: keyof TEventPayloads,
-      accumulated: Set<keyof TEventPayloads> = new Set()
+      _accumulated: Set<keyof TEventPayloads> = new Set()
     ): Set<keyof TEventPayloads> => {
+      if (_accumulated.has(eventType)) {
+        return _accumulated
+      }
+      const accumulated = _accumulated.add(eventType)
       const directDependents = getDirectDependents(eventType)
       
       return Array.from(directDependents).reduce(
         (acc, dependent) => 
           !acc.has(dependent) 
-            ? collectDependents(dependent, acc.add(dependent))
+            ? collectDependents(dependent, accumulated)
             : acc,
         accumulated
       )
@@ -196,25 +229,10 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     return collectDependents(type)
   }
 
-  activate(initialState?: {
-    completed: Partial<{ [K in keyof TEventPayloads]: { at: Date, value: TEventPayloads[K] } }>
-    failed: Partial<{ [K in keyof TEventPayloads]: { at: Date, error: EventError } }>
-  }): void {
+  activate(): void {
     if (this.isActive) return
     
     this.isActive = true
-    
-    if (initialState) {
-      Object.keys(initialState.completed).forEach(type => {
-        const { at, value } = initialState.completed[type]!
-        this.eventManager.completeEvent(type, value, at)
-      })
-      Object.keys(initialState.failed).forEach(type => {
-        const { at, error } = initialState.failed[type]!
-        this.eventManager.failEvent(type, error, at)
-      })
-    }
-
     // TODO: make this more intelligent; we shouldn't need to try to run ALL pending events
     Object.keys(this.dependencies).forEach(type => {
       if (this.getEventStatus(type) === 'PENDING') {
@@ -298,11 +316,11 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     type: keyof TEventPayloads,
     dependencyGroups: DependencyGroup<TEventPayloads>[]
   ): {
-    values: Pick<TEventPayloads, Extract<keyof TEventPayloads, string>>,
+    values: Partial<TEventPayloads>,
     predicates: string[]
   } | null {
     if (dependencyGroups.length === 0) {
-      return { values: {} as Pick<TEventPayloads, Extract<keyof TEventPayloads, string>>, predicates: [] }
+      return { values: {} as Partial<TEventPayloads>, predicates: [] }
     }
 
     for (const group of dependencyGroups) {
@@ -311,10 +329,13 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
       )
 
       if (allDepsCompleted) {
-        const values = group.reduce((acc, dep) => ({
-          ...acc,
-          [dep]: this.eventManager.getCompletedValue(dep)
-        }), {}) as Pick<TEventPayloads, Extract<keyof TEventPayloads, string>>
+        const values = [...new Set(this.dependencies[type].flat())].reduce((acc, dep) => {
+          const completedValues = this.eventManager.getCompletedValue(dep)
+          const value = completedValues
+            ? completedValues[completedValues.length - 1]?.value
+            : undefined 
+          return { ...acc, [dep]: value }
+        }, {}) as Partial<TEventPayloads>
 
         const predicates = this.predicates[type]
           .filter(predicate => {
@@ -322,7 +343,7 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
             return predicate.required.every(dep => this.eventManager.getStatus(dep) === 'COMPLETED')
           })
 
-        const predicatesPass = predicates.every(predicate => !!predicate.fn(values))
+        const predicatesPass = predicates.every(predicate => !!predicate.fn(values, this.getGraph()))
 
         if (predicatesPass) {
           return { values, predicates: predicates.map(predicate => predicate.name) }
@@ -333,7 +354,7 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
     return null
   }
 
-  waitForEvent(type: keyof TEventPayloads): Promise<TEventPayloads[typeof type]> {
+  waitForEvent(type: keyof TEventPayloads): Promise<{ at: Date, value: TEventPayloads[typeof type] }[]> {
     if (this.eventManager.getStatus(type) === 'COMPLETED') {
       return Promise.resolve(this.eventManager.getCompletedValue(type))
     } else if (this.eventManager.getStatus(type) === 'FAILED') {

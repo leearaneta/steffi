@@ -50,6 +50,12 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (!graphRef.current || !currentGraph) return
 
+    // Destroy existing network if it exists
+    if (networkRef.current) {
+      networkRef.current.destroy()
+      networkRef.current = null
+    }
+
     const nodes = new Set<string>()
     const edges: Array<{ from: string; to: string; group: number }> = []
 
@@ -79,7 +85,6 @@ export const App: React.FC = () => {
         to: edge.to,
         color: EDGE_COLORS[edge.group],
         width: 2,
-        // offset parallel edges with different curvature values
         smooth: {
           enabled: true,
           type: 'curvedCW',
@@ -88,61 +93,101 @@ export const App: React.FC = () => {
       }))
     }
 
-    if (!networkRef.current) {
-      const network = new Network(graphRef.current, visData, {
-        height: '100%',
-        width: '100%',
-        layout: {
-          hierarchical: {
-            enabled: true,
-            direction: 'LR',
-            sortMethod: 'directed',
-            levelSeparation: 200,
-            nodeSpacing: 100
-          }
-        },
-        physics: false,
-        interaction: { hover: true },
-        nodes: {
-          shape: 'box',
-          margin: { top: 10, bottom: 10, left: 10, right: 10 },
-          font: { size: 14 }
-        },
-        edges: {
-          arrows: 'to',
-          smooth: {
-            enabled: true,
-            type: 'curvedCW',
-            roundness: 0.2
-          }
+    const networkConfig: Record<string, any> = {
+      height: '100%',
+      width: '100%',
+      physics: false,
+      interaction: { hover: true },
+      nodes: {
+        shape: 'box',
+        margin: { top: 10, bottom: 10, left: 10, right: 10 },
+        font: { size: 14 }
+      },
+      edges: {
+        arrows: 'to',
+        smooth: {
+          enabled: true,
+          type: 'curvedCW',
+          roundness: 0.2
         }
-      })
-
-      network.on('hoverNode', params => {
-        setHoveredNode(params.node)
-      })
-
-      network.on('blurNode', () => {
-        setHoveredNode(null)
-      })
-
-      network.on('selectNode', params => {
-        selectNode(params.nodes[0])
-      })
-
-      networkRef.current = network
-    } else {
-      networkRef.current.setData(visData)
+      }
     }
+
+    if (!currentGraph.allowCycles) {
+      networkConfig.layout = {
+        hierarchical: {
+          direction: 'LR',
+          sortMethod: 'directed',
+          nodeSpacing: 100,
+          levelSeparation: 100,
+        }
+      }
+    }
+
+    // Create new network with current configuration
+    const network = new Network(graphRef.current, visData, networkConfig)
+
+    network.on('hoverNode', params => {
+      setHoveredNode(params.node)
+    })
+
+    network.on('blurNode', () => {
+      setHoveredNode(null)
+    })
+
+    network.on('selectNode', params => {
+      selectNode(params.nodes[0])
+    })
+
+    networkRef.current = network
+
   }, [selectedGraph, graphs])
 
-  const getNodeValue = (nodeId: string) => {
-    return currentGraph?.completedEvents[nodeId]
+  type NodeEvent = {
+    type: 'initiated' | 'completed' | 'failed'
+    at: Date
+    data: any
   }
 
-  const getNodeTimestamp = (nodeId: string) => {
-    if (!currentGraph?.completedTimestamps[nodeId]) return null
-    return new Date(currentGraph.completedTimestamps[nodeId])
+  const getNodeEvents = (nodeId: string): NodeEvent[] => {
+    if (!currentGraph) return []
+
+    const events: NodeEvent[] = []
+
+    // Add initiated events
+    const initiated = currentGraph.initiatedEvents[nodeId] || []
+    ;(Array.isArray(initiated) ? initiated : [initiated]).forEach(init => {
+      if (init) {
+        events.push({
+          type: 'initiated',
+          at: new Date(init.at),
+          data: init.predicates
+        })
+      }
+    })
+
+    // Add completed events
+    const completed = currentGraph.completedEvents[nodeId] || []
+    completed.forEach(({ at, value }) => {
+      events.push({
+        type: 'completed',
+        at: new Date(at),
+        data: value
+      })
+    })
+
+    // Add failed events
+    const failed = currentGraph.failedEvents[nodeId] || []
+    failed.forEach(({ at, error }) => {
+      events.push({
+        type: 'failed',
+        at: new Date(at),
+        data: error
+      })
+    })
+
+    // Sort by timestamp
+    return events.sort((a, b) => a.at.getTime() - b.at.getTime())
   }
 
   const displayNode = hoveredNode || selectedNode
@@ -164,54 +209,70 @@ export const App: React.FC = () => {
 
           {displayNode && (
             <div className="node-value">
-              <strong style={{ fontSize: '1.2em' }}> {displayNode} </strong>
-              <br></br>
-              {currentGraph?.status[displayNode] === 'COMPLETED' &&
-                <>
-                  <div className="node-timestamp">
-                    Completed: {getNodeTimestamp(displayNode)?.toLocaleString()}
-                  </div>
-                  <br></br>
-                  <pre>
-                    {JSON.stringify(getNodeValue(displayNode), null, 2)}
-                  </pre>
-                  <br></br>
-                </>
-              }
+              <strong style={{ fontSize: '1.2em' }}>{displayNode}</strong>
               {currentGraph?.predicates[displayNode] && currentGraph.predicates[displayNode].length > 0 && (
-                <>
-                  <strong> Predicates </strong>
+                <div className="predicates-section">
+                  <strong>Available Predicates:</strong>
                   <ul>
                     {currentGraph?.predicates[displayNode]?.map(predicate => (
-                      <li
-                        style={{ color: predicate.passed ? 'black' : 'grey' }}
-                        key={predicate.name}
-                      >
+                      <li key={predicate.name}>
                         {predicate.name}
                       </li>
                     ))}
                   </ul>
-                </>
+                </div>
               )}
+              <div className="node-events">
+                {getNodeEvents(displayNode).map((event, index) => (
+                  <div key={`${event.type}-${event.at.getTime()}-${index}`} className={`event-item event-${event.type}`}>
+                    <div className="event-header">
+                      <div className="event-type">{event.type}</div>
+                      <div className="event-time">{event.at.toLocaleString()}</div>
+                    </div>
+                    { !(Array.isArray(event.data) && event.data.length === 0 || !event.data) && (
+                      <div className="event-content">
+                        {event.type === 'initiated' && (
+                          <div className="predicates-list">
+                            <strong>Passed Predicates:</strong>
+                            <ul>
+                              {event.data.map((predicate: string) => (
+                                <li key={predicate}>{predicate}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {event.type === 'completed' && (
+                          <pre>{JSON.stringify(event.data, null, 2)}</pre>
+                        )}
+                        {event.type === 'failed' && (
+                          <div className="error-message">{String(event.data)}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
         <div className="graph" ref={graphRef} />
       </div>
       <div className="errors-container">
-        {currentGraph && Object.keys(currentGraph.errors).length > 0 && (
+        {currentGraph && getNodeEvents(displayNode || '').filter(event => event.type === 'failed').length > 0 && (
           <>
             <h3>Errors</h3>
             <ul className="error-list">
-              {Object.entries(currentGraph.errors).map(([eventId, error]) => (
-                <li key={`${eventId}-${currentGraph?.failedTimestamps[eventId]}`} className="error-item">
-                  <span className="error-event">Event: {eventId}</span>
-                  <span className="error-message">{error}</span>
-                  <span className="error-time">
-                    {new Date(currentGraph.failedTimestamps[eventId]).toLocaleString()}
-                  </span>
-                </li>
-              ))}
+              {getNodeEvents(displayNode || '')
+                .filter(event => event.type === 'failed')
+                .map((event, index) => (
+                  <li key={`error-${event.at.getTime()}-${index}`} className="error-item">
+                    <span className="error-event">Event: {displayNode}</span>
+                    <span className="error-message">{String(event.data)}</span>
+                    <span className="error-time">
+                      {event.at.toLocaleString()}
+                    </span>
+                  </li>
+                ))}
             </ul>
           </>
         )}

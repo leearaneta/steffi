@@ -22,6 +22,7 @@ export const useStore = create<Store>((set) => ({
     switch (event.type) {
       case 'GRAPH_REGISTERED': {
         const { name, initialState } = event.payload
+        console.log('GRAPH_REGISTERED', name, initialState)
         return {
           graphs: { ...state.graphs, [name]: initialState },
           selectedGraph: state.selectedGraph || name
@@ -53,7 +54,7 @@ export const useStore = create<Store>((set) => ({
       }
       
       case 'EVENT_STARTED': {
-        const { graphName, eventName, predicates } = event.payload
+        const { graphName, eventName, predicates, at } = event.payload
         const graph = state.graphs[graphName]
         if (!graph) return state
 
@@ -67,12 +68,9 @@ export const useStore = create<Store>((set) => ({
                 ...graph.status,
                 [eventName]: 'IN_PROGRESS'
               },
-              predicates: {
-                ...graph.predicates,
-                [eventName]: graph.predicates[eventName].map(predicate => ({
-                  ...predicate,
-                  passed: predicates.includes(predicate.name)
-                }))
+              initiatedEvents: {
+                ...graph.initiatedEvents,
+                [eventName]: [...graph.initiatedEvents[eventName], { at, predicates }]
               }
             }
           }
@@ -80,7 +78,7 @@ export const useStore = create<Store>((set) => ({
       }
 
       case 'EVENT_COMPLETED': {
-        const { graphName, eventName, value } = event.payload
+        const { graphName, eventName, value, at } = event.payload
         const graph = state.graphs[graphName]
         if (!graph) return state
 
@@ -96,19 +94,15 @@ export const useStore = create<Store>((set) => ({
               },
               completedEvents: {
                 ...graph.completedEvents,
-                [eventName]: value
+                [eventName]: [...graph.completedEvents[eventName], { at, value }]
               },
-              completedTimestamps: {
-                ...graph.completedTimestamps,
-                [eventName]: Date.now()
-              }
             }
           }
         }
       }
 
       case 'EVENT_FAILED': {
-        const { graphName, eventName, error } = event.payload
+        const { graphName, eventName, error, at } = event.payload
         const graph = state.graphs[graphName]
         if (!graph) return state
 
@@ -122,13 +116,9 @@ export const useStore = create<Store>((set) => ({
                 ...graph.status,
                 [eventName]: 'FAILED'
               },
-              errors: {
-                ...graph.errors,
-                [eventName]: error
-              },
-              failedTimestamps: {
-                ...graph.failedTimestamps,
-                [eventName]: Date.now()
+              failedEvents: {
+                ...graph.failedEvents,
+                [eventName]: [...graph.failedEvents[eventName], { at, error }]
               }
             }
           }

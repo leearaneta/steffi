@@ -1,53 +1,64 @@
 import { EventEmitter } from 'events'
-import type { BaseEventPayloads, DependencyGraphOptions, EventStatus, EventError, DependencyPredicate } from '@steffi/types'
+import type { BaseEventPayloads, EventStatus, EventError, EventOptions } from '@steffi/types'
 
 export class EventManager<TEventPayloads extends BaseEventPayloads> {
   private runnables = {} as Record<
     keyof TEventPayloads, 
-    (args: Pick<TEventPayloads, Extract<keyof TEventPayloads, string>>) => Promise<void>
+    (args: Partial<TEventPayloads>) => Promise<void>
   >
-  completedEvents = {} as {[K in keyof TEventPayloads]: TEventPayloads[K]}
-  completedTimestamps = {} as Record<keyof TEventPayloads, number>
-  eventOptions = {} as Record<keyof TEventPayloads, Required<DependencyGraphOptions>>
+  initiatedEvents = {} as {[K in keyof TEventPayloads]: { at: Date, predicates: string[] }[]}
+  completedEvents = {} as {[K in keyof TEventPayloads]: { at: Date, value: TEventPayloads[K] }[]}
+  failedEvents = {} as Record<keyof TEventPayloads, { at: Date, error: EventError }[]>
+  eventOptions = {} as Record<keyof TEventPayloads, EventOptions<TEventPayloads>>
   eventStatus = {} as Record<keyof TEventPayloads, EventStatus>
-  errors = {} as Record<keyof TEventPayloads, EventError>
-  failedTimestamps = {} as Record<keyof TEventPayloads, number>
-  private readonly defaultOptions: Required<DependencyGraphOptions>
+  private readonly defaultOptions: Required<Omit<EventOptions<TEventPayloads>, 'predicates'>>
 
   constructor(
     private emitter: EventEmitter,
-    options: DependencyGraphOptions = {}
+    options: EventOptions<TEventPayloads> = {}
   ) {
     this.defaultOptions = {
       maxRetries: options.maxRetries ?? 1,
       retryDelay: options.retryDelay ?? 1000,
       timeout: options.timeout ?? 1000000,
-      fireOnComplete: options.fireOnComplete ?? true
+      fireOnComplete: options.fireOnComplete ?? true,
+      maxRuns: options.maxRuns ?? 5,
     }
   }
 
   registerEvent(
     type: keyof TEventPayloads,
-    runnable: (args: Pick<TEventPayloads, Extract<keyof TEventPayloads, string>>) => Promise<void>,
-    options: DependencyGraphOptions = {}
+    runnable: (args: Partial<TEventPayloads>) => Promise<void>,
+    options: EventOptions<TEventPayloads> = {}
   ) {
+    console.log('registering event', type, options)
     const mergedOptions = {
       ...this.defaultOptions,
       ...options
     }
-    
     this.eventOptions[type] = mergedOptions
     this.runnables[type] = runnable
-    this.eventStatus[type] = 'PENDING'
+    if (!this.eventStatus[type]) {
+      this.eventStatus[type] = 'PENDING'
+    }
+    if (!this.completedEvents[type]) {
+      this.completedEvents[type] = []
+    }
+    if (!this.failedEvents[type]) {
+      this.failedEvents[type] = []
+    } 
+    if (!this.initiatedEvents[type]) {
+      this.initiatedEvents[type] = []
+    }
   }
 
   deregisterEvent(type: keyof TEventPayloads) {
     delete this.runnables[type]
     delete this.completedEvents[type]
-    delete this.completedTimestamps[type]
+    delete this.failedEvents[type]
+    delete this.initiatedEvents[type]
     delete this.eventOptions[type]
     delete this.eventStatus[type]
-    delete this.errors[type]
   }
 
   async completeEvent(
@@ -63,24 +74,36 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
       )
       return
     }
-    this.completedEvents[type] = value
-    this.completedTimestamps[type] = at ? at.getTime() : Date.now()
+    if (!this.completedEvents[type]) {
+      this.completedEvents[type] = []
+    }
+    this.completedEvents[type].push({ at, value })
     this.eventStatus[type] = 'COMPLETED'
   }
 
   async executeEvent(
     type: keyof TEventPayloads, 
-    eventArgs: Pick<TEventPayloads, Extract<keyof TEventPayloads, string>>,
+    eventArgs: Partial<TEventPayloads>,
     predicates: string[] = []
   ) {
-    const options = this.eventOptions[type] ?? this.defaultOptions
-    const { maxRetries, retryDelay, timeout } = options
+    const now = new Date()
+    this.eventStatus[type] = 'IN_PROGRESS'
+    if (!this.initiatedEvents[type]) {
+      this.initiatedEvents[type] = []
+    }
+    this.initiatedEvents[type].push({ at: now, predicates })
+    this.emitter.emit('eventStarted', type, predicates, now)
+
+    const options = { ...this.defaultOptions, ...this.eventOptions[type] }
+    const { maxRetries, retryDelay, timeout, maxRuns } = options
+    const totalRuns = [...(this.completedEvents[type] || []), ...(this.failedEvents[type] || [])].length
+    if (totalRuns >= maxRuns) {
+      this.failEvent(type, 'max runs reached', new Date())
+      return
+    }
 
     const executeWithRetries = async (retryCount = 0): Promise<void> => {
       try {
-        this.eventStatus[type] = 'IN_PROGRESS'
-        this.emitter.emit('eventStarted', type, predicates)
-        
         const timeoutPromise = new Promise<void>((_, reject) => {
           setTimeout(() => reject(new Error(`Event ${String(type)} timed out after ${timeout}ms`)), timeout)
         })
@@ -119,32 +142,15 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
       )
       return
     }
-    this.failedTimestamps[type] = at.getTime()
+    if (!this.failedEvents[type]) {
+      this.failedEvents[type] = []
+    }
+    this.failedEvents[type].push({ at, error })
     this.eventStatus[type] = 'FAILED'
-    this.errors[type] = error
   }
 
   resetEvent(type: keyof TEventPayloads) {
-    delete this.completedEvents[type]
-    delete this.completedTimestamps[type]
     this.eventStatus[type] = 'PENDING'
-    delete this.errors[type]
-  }
-
-  resetEventsAfterTime(time: Date): Set<keyof TEventPayloads> {
-    const eventsToReset = new Set<keyof TEventPayloads>()
-    
-    for (const [key, timestamp] of Object.entries(this.completedTimestamps)) {
-      if (timestamp > time.getTime()) {
-        eventsToReset.add(key as keyof TEventPayloads)
-      }
-    }
-
-    for (const eventType of eventsToReset) {
-      this.resetEvent(eventType)
-    }
-
-    return eventsToReset
   }
 
   getStatus(type: keyof TEventPayloads): EventStatus | undefined {
@@ -156,6 +162,6 @@ export class EventManager<TEventPayloads extends BaseEventPayloads> {
   }
 
   getError(type: keyof TEventPayloads) {
-    return this.errors[type]
+    return this.failedEvents[type]
   }
 } 

@@ -57,7 +57,7 @@ graph.registerEvent(
   },
   { predicates: [{
     name: 'heating longer than 300s',
-    fn: ({ heatSolution }) => heatSolution.timeSeconds > 300
+    fn: ({ heatSolution }) => heatSolution!.timeSeconds > 300
   }] }
 )
 
@@ -75,7 +75,7 @@ graph.registerEvent(
   },
   { predicates: [{
     name: 'heating less than 300s',
-    fn: ({ heatSolution }) => heatSolution.timeSeconds <= 300
+    fn: ({ heatSolution }) => heatSolution!.timeSeconds <= 300
   }] }
 )
 
@@ -122,3 +122,67 @@ registry.registerGraph('potion-brewing', graph)
 registry.startVisualizationServer(3000, { dev: true })
 
 graph.activate()
+
+// Cyclical graph example
+interface CyclicalEvents {
+  init: void
+  a: { count: number, value: string }
+  b: { count: number, value: string }
+  c: { finalCount: number }
+}
+
+const REQUIRED_CYCLES = 3
+const cyclicalGraph = new DependencyGraph<CyclicalEvents>({ allowCycles: true })
+
+// Initial event to break the cycle
+cyclicalGraph.registerEvent('init', [], async () => {
+  console.log('Initializing cyclical graph...')
+})
+
+// Event A depends on init or B
+cyclicalGraph.registerEvent('a', [{ or: [['init'], ['b']] }], async (deps) => {
+  const count = deps.b ? deps.b.count + 1 : 1
+  await new Promise(resolve => setTimeout(resolve, 500))
+  return {
+    count,
+    value: `a-value-${count}`
+  }
+})
+
+// Event B depends on A, but stops after REQUIRED_CYCLES
+cyclicalGraph.registerEvent('b', ['a'], async (deps) => {
+
+  await new Promise(resolve => setTimeout(resolve, 500))
+  return {
+    count: deps.a!.count,
+    value: `b-value-${deps.a!.count}`
+  }
+}, {
+  predicates: [{
+    name: 'stopAfterRequiredCycles',
+    fn: ({ a }, graphState) => {
+      const bRuns = graphState.completedEvents.b?.length ?? 0
+      return bRuns < REQUIRED_CYCLES
+    }
+  }]
+})
+
+// Event C depends on either A or B, but only runs when B has completed REQUIRED_CYCLES
+cyclicalGraph.registerEvent('c', ['b'], async (deps) => {
+  const count = deps.b ? deps.b.count : deps.a!.count
+  await new Promise(resolve => setTimeout(resolve, 500))
+  return {
+    finalCount: count
+  }
+}, {
+  predicates: [{
+    name: 'runAfterBCompletes',
+    fn: ({ a, b }, graphState) => {
+      const bRuns = graphState.completedEvents.b?.length ?? 0
+      return bRuns === REQUIRED_CYCLES
+    }
+  }]
+})
+
+registry.registerGraph('cyclical', cyclicalGraph)
+cyclicalGraph.activate()

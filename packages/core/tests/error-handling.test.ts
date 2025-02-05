@@ -46,7 +46,6 @@ describe('DependencyGraph - Error Handling', () => {
     } catch (e) {
       // expected to throw
     }
-
     expect(handler).toHaveBeenCalledTimes(3) // initial + 2 retries
     expect(graph.getEventStatus('event1')).toBe('FAILED')
   })

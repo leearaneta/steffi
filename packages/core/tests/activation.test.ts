@@ -38,17 +38,6 @@ describe('DependencyGraph - Activation', () => {
   })
 
   it('loads initial state correctly', async () => {
-    const graph = new DependencyGraph<{
-      event1: { value: number }
-      event2: { value: number }
-    }>()
-    
-    const handler1 = jest.fn()
-    const handler2 = jest.fn()
-    
-    graph.registerEvent('event1', [], handler1)
-    graph.registerEvent('event2', ['event1'], handler2)
-    
     const initialState = {
       completed: {
         event1: {
@@ -59,7 +48,18 @@ describe('DependencyGraph - Activation', () => {
       failed: {}
     }
 
-    graph.activate(initialState)
+    const graph = new DependencyGraph<{
+      event1: { value: number }
+      event2: { value: number }
+    }>({ initialState })
+    
+    const handler1 = jest.fn()
+    const handler2 = jest.fn()
+    
+    graph.registerEvent('event1', [], handler1)
+    graph.registerEvent('event2', ['event1'], handler2)
+
+    graph.activate()
     await new Promise(resolve => setTimeout(resolve, 50))
     
     expect(handler1).not.toHaveBeenCalled() // should not run since loaded from state

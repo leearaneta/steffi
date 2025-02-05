@@ -38,10 +38,10 @@ export class GraphRegistry {
       })
     })
 
-    graph.on('eventStarted', (eventName: string, predicates: string[]) => {
+    graph.on('eventStarted', (eventName: string, predicates: string[], at: Date) => {
       this.broadcast({
         type: 'EVENT_STARTED',
-        payload: { graphName: name, eventName, predicates }
+        payload: { graphName: name, eventName, predicates, at }
       })
     })
 
