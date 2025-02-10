@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import type { BaseEventPayloads, EventStatus, EventError, EventOptions } from '@steffi/types'
+import type { BaseEventPayloads, EventStatus, EventError, EventOptions } from './types'
 
 export class EventManager<TEventPayloads extends BaseEventPayloads> {
   private runnables = {} as Record<

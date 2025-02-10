@@ -1,12 +1,15 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "target": "es2020",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "declaration": true,
     "outDir": "./dist",
-    "rootDir": ".",
-    "lib": ["ES2020"]
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
   },
-  "references": [
-    { "path": "../../packages/types" }
-  ],
-  "include": ["src", "tests"],
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }

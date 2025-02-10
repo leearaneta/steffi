@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import { Network } from 'vis-network'
 import { useStore } from './store'
-import type { EventStatus, GraphState } from '@steffi/types'
+import type { EventStatus, GraphState } from 'steffi'
 import './App.css'
 
 const EDGE_COLORS = [
@@ -118,8 +118,8 @@ export const App: React.FC = () => {
         hierarchical: {
           direction: 'LR',
           sortMethod: 'directed',
-          nodeSpacing: 100,
-          levelSeparation: 100,
+          nodeSpacing: 250,
+          levelSeparation: 250,
         }
       }
     }
@@ -256,26 +256,6 @@ export const App: React.FC = () => {
           )}
         </div>
         <div className="graph" ref={graphRef} />
-      </div>
-      <div className="errors-container">
-        {currentGraph && getNodeEvents(displayNode || '').filter(event => event.type === 'failed').length > 0 && (
-          <>
-            <h3>Errors</h3>
-            <ul className="error-list">
-              {getNodeEvents(displayNode || '')
-                .filter(event => event.type === 'failed')
-                .map((event, index) => (
-                  <li key={`error-${event.at.getTime()}-${index}`} className="error-item">
-                    <span className="error-event">Event: {displayNode}</span>
-                    <span className="error-message">{String(event.data)}</span>
-                    <span className="error-time">
-                      {event.at.toLocaleString()}
-                    </span>
-                  </li>
-                ))}
-            </ul>
-          </>
-        )}
       </div>
     </div>
   )

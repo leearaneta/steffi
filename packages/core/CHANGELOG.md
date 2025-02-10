@@ -1,12 +1,11 @@
 # steffi
 
-## 2.0.1
+## 7.0.0
 
-### Major Changes
+### Minor Changes
 
-- separated visualization and core
+- remove unnecessary types
 
 ### Patch Changes
 
-- Updated dependencies
-  - steffi-viz@2.0.1
+- steffi-viz@7.0.0

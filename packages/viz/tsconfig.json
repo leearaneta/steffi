@@ -1,14 +1,17 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "target": "es2020",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "declaration": true,
     "outDir": "./dist",
-    "rootDir": "./src",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx"
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
+    "lib": ["dom", "dom.iterable", "es2020"]
   },
-  "references": [
-    { "path": "../../packages/types" },
-    { "path": "../../packages/core" }
-  ],
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
 }

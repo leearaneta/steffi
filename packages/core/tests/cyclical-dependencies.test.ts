@@ -1,5 +1,5 @@
 import { DependencyGraph } from '../src/DependencyGraph'
-import type { GraphState } from '@steffi/types'
+import type { GraphState } from '../src/types'
 
 interface TestEvents {
   init: void

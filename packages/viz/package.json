@@ -1,6 +1,6 @@
 {
   "name": "steffi-viz",
-  "version": "2.0.1",
+  "version": "7.0.0",
   "description": "Visualization tools for steffi dependency graphs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,26 +10,26 @@
   },
   "scripts": {
     "dev": "vite src/client",
-    "build:client": "vite build src/client --outDir ../dist/client",
+    "build:client": "vite build",
     "build:server": "tsc",
     "build": "pnpm build:server && pnpm build:client"
   },
   "dependencies": {
-    "steffi": "*",
+    "steffi": "workspace:*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "vis-network": "^9.1.6",
     "zustand": "^4.3.8"
   },
   "peerDependencies": {
-    "steffi": "*"
+    "steffi": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.0.0",
-    "@steffi/types": "*",
     "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
     "vite": "^4.3.9"
   },
   "author": "leearaneta"

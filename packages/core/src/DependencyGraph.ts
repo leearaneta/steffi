@@ -10,7 +10,7 @@ import type {
   DependencyPredicate,
   OrGroup,
   EventOptions,
-} from '@steffi/types'
+} from './types'
 
 export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends EventEmitter {
   private dependencies = {} as Record<keyof TEventPayloads, DependencyGroup<TEventPayloads>[]>
@@ -70,7 +70,7 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
   }
 
   registerEvent<
-    TDeps extends Extract<keyof TEventPayloads, string>,
+    TDeps extends keyof TEventPayloads,
     TOptions extends EventOptions<TEventPayloads>
   >(
     type: TDeps,
@@ -188,7 +188,12 @@ export class DependencyGraph<TEventPayloads extends BaseEventPayloads> extends E
   getGraph(): GraphState {
     return {
       allowCycles: this.allowCycles,
-      dependencies: this.dependencies,
+      dependencies: Object.fromEntries(
+        Object.entries(this.dependencies).map(([k, v]) => [
+          String(k),
+          v.map(group => group.map(String))
+        ])
+      ),
       dependents: Object.fromEntries(
         Object.entries(this.dependents).map(([k, v]) => [
           String(k),

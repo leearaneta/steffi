@@ -1,12 +1,8 @@
 # steffi-viz
 
-## 2.0.1
-
-### Major Changes
-
-- separated visualization and core
+## 7.0.0
 
 ### Patch Changes
 
 - Updated dependencies
-  - steffi@2.0.1
+  - steffi@7.0.0

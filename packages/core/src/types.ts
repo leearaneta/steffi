@@ -5,7 +5,7 @@ export type EventStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
 export type DependencyPredicate<T extends BaseEventPayloads> = {
   fn: (args: Partial<T>, graph: GraphState) => boolean
   name: string;
-  required?: Extract<keyof T, string>[],
+  required?: (keyof T)[],
 }
 
 export type DependencyGraphOptions = {
@@ -63,9 +63,9 @@ export type OrGroup<T extends BaseEventPayloads> = {
 }
 
 export type RecursiveDependency<T extends BaseEventPayloads> = 
-  | Extract<keyof T, string>
+  | keyof T
   | OrGroup<T>
 
 export type Dependencies<T extends BaseEventPayloads> = RecursiveDependency<T>[]
 
-export type DependencyGroup<T extends BaseEventPayloads> = Extract<keyof T, string>[]
+export type DependencyGroup<T extends BaseEventPayloads> = (keyof T)[] 

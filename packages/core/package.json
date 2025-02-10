@@ -1,7 +1,7 @@
 {
   "name": "steffi",
-  "version": "2.0.1",
-  "description": "typesafe, event-driven DAG (directed acyclic graph) execution",
+  "version": "7.0.0",
+  "description": "typesafe, event-driven graph execution",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "MIT",
@@ -15,12 +15,12 @@
   "devDependencies": {
     "@types/jest": "^29.5.0",
     "@types/node": "^22.10.1",
-    "@steffi/types": "*",
     "jest": "^29.5.0",
-    "ts-jest": "^29.1.0"
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.0"
   },
   "peerDependencies": {
-    "steffi-viz": "*"
+    "steffi-viz": "workspace:*"
   },
   "peerDependenciesMeta": {
     "steffi-viz": {

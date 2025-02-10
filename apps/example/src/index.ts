@@ -1,5 +1,4 @@
-import { DependencyGraph } from './packages/core/dist'
-import { GraphRegistry } from './packages/viz/src/GraphRegistry'
+import { DependencyGraph, GraphRegistry } from 'steffi'
 
 interface PotionBrewing {
   heatSolution: {
@@ -42,7 +41,6 @@ graph.registerEvent('heatSolution', [], async () => {
     timeSeconds
   }
 })
-
 
 graph.registerEvent(
   'dissolveReagent',
@@ -142,6 +140,7 @@ cyclicalGraph.registerEvent('init', [], async () => {
 // Event A depends on init or B
 cyclicalGraph.registerEvent('a', [{ or: [['init'], ['b']] }], async (deps) => {
   const count = deps.b ? deps.b.count + 1 : 1
+  console.log(`Running A (cycle ${count})...`)
   await new Promise(resolve => setTimeout(resolve, 500))
   return {
     count,
@@ -151,7 +150,7 @@ cyclicalGraph.registerEvent('a', [{ or: [['init'], ['b']] }], async (deps) => {
 
 // Event B depends on A, but stops after REQUIRED_CYCLES
 cyclicalGraph.registerEvent('b', ['a'], async (deps) => {
-
+  console.log(`Running B (cycle ${deps.a!.count})...`)
   await new Promise(resolve => setTimeout(resolve, 500))
   return {
     count: deps.a!.count,
@@ -160,6 +159,7 @@ cyclicalGraph.registerEvent('b', ['a'], async (deps) => {
 }, {
   predicates: [{
     name: 'stopAfterRequiredCycles',
+    required: ['a'],
     fn: ({ a }, graphState) => {
       const bRuns = graphState.completedEvents.b?.length ?? 0
       return bRuns < REQUIRED_CYCLES
@@ -170,6 +170,7 @@ cyclicalGraph.registerEvent('b', ['a'], async (deps) => {
 // Event C depends on either A or B, but only runs when B has completed REQUIRED_CYCLES
 cyclicalGraph.registerEvent('c', ['b'], async (deps) => {
   const count = deps.b ? deps.b.count : deps.a!.count
+  console.log('Running C (final event)...')
   await new Promise(resolve => setTimeout(resolve, 500))
   return {
     finalCount: count
@@ -177,6 +178,7 @@ cyclicalGraph.registerEvent('c', ['b'], async (deps) => {
 }, {
   predicates: [{
     name: 'runAfterBCompletes',
+    required: ['a', 'b'],
     fn: ({ a, b }, graphState) => {
       const bRuns = graphState.completedEvents.b?.length ?? 0
       return bRuns === REQUIRED_CYCLES
@@ -185,4 +187,4 @@ cyclicalGraph.registerEvent('c', ['b'], async (deps) => {
 })
 
 registry.registerGraph('cyclical', cyclicalGraph)
-cyclicalGraph.activate()
+cyclicalGraph.activate() 

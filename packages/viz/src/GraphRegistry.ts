@@ -3,7 +3,7 @@ import { createServer, Server } from 'http'
 import path from 'path'
 import fs from 'fs'
 import http from 'http'
-import type { BaseEventPayloads, EventError, GraphEvent, DependencyPredicate } from '@steffi/types'
+import type { BaseEventPayloads, EventError, GraphEvent, DependencyPredicate } from 'steffi'
 
 export class GraphRegistry {
   private static instance: GraphRegistry
@@ -114,6 +114,14 @@ export class GraphRegistry {
       // static file serving
       let filePath = path.join(__dirname, 'client')
       
+      // If we're in development mode, use the dist/client directory
+      if (!fs.existsSync(filePath)) {
+        filePath = path.join(__dirname, '../client')
+      }
+      
+      console.log('Base path:', filePath)
+      console.log('Request URL:', req.url)
+      
       if (req.url === '/') {
         filePath = path.join(filePath, 'index.html')
       } else {
@@ -121,8 +129,11 @@ export class GraphRegistry {
       }
 
       if (!fs.existsSync(filePath)) {
-        filePath = path.join(filePath, 'index.html')
+        console.log('File not found, trying index.html:', filePath)
+        filePath = path.join(path.dirname(filePath), 'index.html')
       }
+      console.log('Final path:', filePath)
+      console.log('File exists?', fs.existsSync(filePath))
 
       const extname = path.extname(filePath)
       const contentType = {

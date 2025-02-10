@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { GraphState, GraphEvent } from '@steffi/types'
+import { GraphState, GraphEvent } from 'steffi'
 
 interface Store {
   graphs: Record<string, GraphState>
